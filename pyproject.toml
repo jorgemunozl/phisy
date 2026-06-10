@@ -10,3 +10,9 @@ dependencies = [
     "scipy>=1.17.0",
     "sympy>=1.14.0",
 ]
+
+[dependency-groups]
+animation = [
+    "manim>=0.20.1",
+    "typst>=0.14.9",
+]

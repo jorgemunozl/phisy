@@ -15,3 +15,7 @@ src/curricular/mathematics_methods_lab_01/images/analitico/*
 src/curricular/mathematics_methods_lab_01/images/computacional/*
 src/curricular/mathematics_methods_lab_02/images/analitico/*
 src/curricular/mathematics_methods_lab_02/images/*
+
+*.typ
+*.tex
+Makefile
