@@ -6,6 +6,8 @@ dist/
 wheels/
 *.egg-info
 
+src/curricular/mathematics_methods_lab_03/images/
+
 # Virtual environments
 .venv
 src/double_pendulum/data/
