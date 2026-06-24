@@ -1,4 +1,3 @@
-from _typeshed import Self
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -157,8 +156,9 @@ class DoublePendulumSolver:
             self._build_paths()
 
         if self.path_numpy.exists():
-            print("Solution already exists!!")
+            print("Solution already exists!!", self.path_numpy)
         else:
+            print("Computing solution on", self.path_numpy)
             if self.method == "rk4":
                 self.solve_rk4()
             elif self.method == "rk8":
@@ -194,9 +194,10 @@ class DoublePendulumSolver:
     def save_solution(self, u):
         np.save(self.path_numpy, u)
 
-    def solve_rk4(self):
+    def solve_rk4(self, dt=None):
+        if dt is None:
+            dt = self.time / self.steps
         u_0 = self.build_initial_conditions()
-        dt = self.time / self.steps
         u = np.zeros((self.steps + 1, 4))
         u[0] = u_0
         for i in range(self.steps):
@@ -209,7 +210,7 @@ class DoublePendulumSolver:
         from scipy.integrate import solve_ivp
 
         u_0 = self.build_initial_conditions()
-        d_span, t_eval = self.build_times()
+        t_span, t_eval = self.build_times()
         sol = solve_ivp(
             rhs,
             t_span,
@@ -224,23 +225,57 @@ class DoublePendulumSolver:
 
     def get_energy(self, u: np.ndarray) -> np.ndarray:
         # u = [theta_1, omega_1, theta_2, omega_2]
-        return calc_kinetic_energy(M1, L1, u[1], M2, L2, u[3], u[0] - u[2]) + calc_potential_energy(M1, L1, M2, L2, u[0], u[2])
+        if u.ndim == 1:
+            # Single state vector: shape (4,)
+            return calc_kinetic_energy(
+                M1, L1, u[1], M2, L2, u[3], u[0] - u[2]
+            ) + calc_potential_energy(M1, L1, M2, L2, u[0], u[2])
+        # Batch of state vectors: shape (N, 4)
+        return calc_kinetic_energy(
+            M1, L1, u[:, 1], M2, L2, u[:, 3], u[:, 0] - u[:, 2]
+        ) + calc_potential_energy(M1, L1, M2, L2, u[:, 0], u[:, 2])
 
-    def get_delta_E():
+    def get_delta_E(self) -> np.ndarray:
         u = np.load(self.path_numpy)
         u_0, u_f = u[0], u[-1]
         return self.get_energy(u_f) - self.get_energy(u_0)
 
-    def plot_difference(self, u_self: np.ndarray, u_odd: np.ndarray):
+    def plot_e_vs_time(self, method=None, preset=None):
         """
         Delta E against H
         """
         import matplotlib.pyplot as plt
 
-        for i in range(10):
+        t = np.linspace(0, self.time, self.steps + 1)
+        u = np.load(self.path_numpy)
+        e_self = self.get_energy(u)
+        plt.plot(t, e_self, label=f"{self.method}")
+        # plt.axhline(e_self[0], color="r", linestyle="--")
+        if method is not None:
+            solver = DoublePendulumSolver(method=method, preset=preset)
+            solver.solve()
+            u_odd = np.load(solver.path_numpy)
+            t = np.linspace(0, self.time, self.steps)
+            plt.plot(t, self.get_energy(u_odd), label=f"{method}")
+            plt.axhline(self.get_energy(u_odd)[0], color="r", linestyle="--")
 
+        plt.xlabel("Time")
+        plt.ylabel("Energy")
+        plt.legend()
+        plt.show()
 
-
+    def plot_delta_e_vs_h(self, h_steps):
+        e_s = []
+        for h_step in h_steps:
+            # 0, 1, 2, 3, 4 -> 1, 0.1, 0.01, 0.001, 0.0001
+            u_h = self.solve_rk4(dt=(0.1) ** h_step)
+            t = np.linspace(0, self.time, self.steps + 1)
+            e_h = self.get_energy(u_h)
+            plt.plot(t, e_h, label=f"h={h_step}")
+        plt.xlabel("Time")
+        plt.ylabel("Energy")
+        plt.legend()
+        plt.show()
 
     def compare_solutions(self, method: Literal["rk4", "rk8"], preset: str):
         solver_odd = DoublePendulumSolver(method=method, preset=preset)
@@ -253,7 +288,7 @@ class DoublePendulumSolver:
 
         diffs = np.zeros(u_self.shape)
         print("Resting", self.method, "against", solver_odd.method)
-        for i in range(u_self.shape[0]):
+        for i in range(u_self.shape[0] - 1):
             diff = u_self[i] - u_odd[i]
             diffs[i] = diff
 
@@ -263,20 +298,16 @@ class DoublePendulumSolver:
         u_f_self = u_self[-1]
         u_f_odd = u_odd[-1]
 
-        e_0_self = self.kinetic_energy(u_0_self) + self.potential_energy(u_0_self)
+        e_0_self = self.get_energy(u_0_self)
         print(f"Energy at t=0 (self): {e_0_self}")
-        e_0_odd = solver_odd.kinetic_energy(u_0_odd) + solver_odd.potential_energy(
-            u_0_odd
-        )
+        e_0_odd = solver_odd.get_energy(u_0_odd)
         print(f"Energy at t=0 (odd): {e_0_odd}")
         e_0_diff = e_0_self - e_0_odd
         print(f"Energy difference at t=0: {e_0_diff}")
 
-        e_f_self = self.kinetic_energy(u_f_self) + self.potential_energy(u_f_self)
+        e_f_self = self.get_energy(u_f_self)
         print(f"Energy at t=final (self): {e_f_self}")
-        e_f_odd = solver_odd.kinetic_energy(u_f_odd) + solver_odd.potential_energy(
-            u_f_odd
-        )
+        e_f_odd = solver_odd.get_energy(u_f_odd)
         print(f"Energy at t=final (odd): {e_f_odd}")
         e_self_f_diff = e_f_self - e_0_self
         e_odd_f_diff = e_f_odd - e_0_odd

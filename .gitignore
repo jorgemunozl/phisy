@@ -8,6 +8,10 @@ wheels/
 
 src/curricular/mathematics_methods_lab_03/images/
 
+*.svg
+
+*.mp4
+
 # Virtual environments
 .venv
 */media/*
