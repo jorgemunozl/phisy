@@ -1,7 +1,21 @@
+from this import s
+
 import matplotlib.pyplot as plt
 import numpy as np
-import math
-from utils import double_fac
+from scipy.special import sph_harm_y
+
+
+class WaveFunction:
+    def __init__(
+        self,
+    ):
+        pass
+
+    def hidrogen_atom_solution(self, r, theta, phi):
+        return sph_harm_y()
+
+    def angular_momentum_hidrogen(self, l, m, r, theta, phi):
+        return sph_harm_y(l, m, theta, phi)
 
 
 class Legendre:
@@ -36,19 +50,19 @@ class Legendre:
         """
         Comparation
         """
-        return 1/2*(3*np.pow(x, 2)-1)
+        return 1 / 2 * (3 * np.pow(x, 2) - 1)
 
 
 def legendre_5(x):
-    return 1/8*(63*np.pow(x, 5)-70*np.pow(x, 3)+15*x)
+    return 1 / 8 * (63 * np.pow(x, 5) - 70 * np.pow(x, 3) + 15 * x)
 
 
 def legendre_derivative(n, x):
     """
     Returns the derivative of the n legendre function
     """
-    diff = legendre_polinomial(n-1, x) - x*legendre_polinomial(n, x)
-    return n/(1-np.pow(x, 2))*diff
+    diff = legendre_polinomial(n - 1, x) - x * legendre_polinomial(n, x)
+    return n / (1 - np.pow(x, 2)) * diff
 
 
 def P_lm(l, m, x):
@@ -60,21 +74,21 @@ def P_lm(l, m, x):
         raise ValueError("Need 0 <= m <= l")
 
     # P_m^m(x)
-    P_mm = (-1)**m * double_fac(2*m - 1) * (1 - x**2)**(m/2)
+    P_mm = (-1) ** m * double_fac(2 * m - 1) * (1 - x**2) ** (m / 2)
     if l == m:
         return P_mm
 
     # P_{m+1}^m(x)
-    P_m1m = x * (2*m + 1) * P_mm
+    P_m1m = x * (2 * m + 1) * P_mm
     if l == m + 1:
         return P_m1m
 
     # Upward recurrence in l
-    P_lm2 = P_mm   # P_m^m
+    P_lm2 = P_mm  # P_m^m
     P_lm1 = P_m1m  # P_{m+1}^m
 
     for ell in range(m + 2, l + 1):
-        P_l = ((2*ell - 1) * x * P_lm1 - (ell + m - 1) * P_lm2) / (ell - m)
+        P_l = ((2 * ell - 1) * x * P_lm1 - (ell + m - 1) * P_lm2) / (ell - m)
         P_lm2, P_lm1 = P_lm1, P_l
 
     return P_l
@@ -87,15 +101,15 @@ def d_m_legendre(l, m, x):
     if m < 0 or m > l:
         raise ValueError("Need 0 <= m <= l")
     Plm = P_lm(l, m, x)
-    return (-1)**m * (1 - x**2)**(-m/2) * Plm
+    return (-1) ** m * (1 - x**2) ** (-m / 2) * Plm
 
 
 def f_legendre_1_1(x):
-    return -1*np.sqrt(1-np.pow(x, 2))
+    return -1 * np.sqrt(1 - np.pow(x, 2))
 
 
 def f_legendre_1_2(x):
-    return -3*x*np.sqrt(1-np.pow(x, 2))
+    return -3 * x * np.sqrt(1 - np.pow(x, 2))
 
 
 if __name__ == "__main__":
