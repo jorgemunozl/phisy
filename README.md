@@ -20,7 +20,7 @@
 
 **Magnetic dipole field** &mdash; a quiver plot of **B** in the xz-plane, computed from the vector potential and verified against Stokes' theorem.
 
-<p align="center"><img src="media/prob4_B_field.png" width="550" alt="B field quiver plot"></p>
+<p align="center"><img src="images/prob4_B_field.png" width="550" alt="B field quiver plot"></p>
 
 *Purely radial field, strongest at the poles, vanishing at the equator &mdash; classic dipolar morphology.*
 
@@ -29,8 +29,8 @@
 **Wave function cross-sections** &mdash; slices through 3D quantum states reveal nodal surfaces and symmetry patterns.
 
 <p>
-  <img src="media/xz_plane_6.png" width="370" alt="Wave function xz-plane slice">
-  <img src="media/3_2_0.png" width="370" alt="Wave function isosurface">
+  <img src="images/xz_plane_6.png" width="370" alt="Wave function xz-plane slice">
+  <img src="images/3_2_0.png" width="370" alt="Wave function isosurface">
 </p>
 
 *Left: xz-plane cut of the |n=6⟩ state. Right: 3D isosurface of the |3,2,0⟩ hydrogen orbital.*
@@ -43,15 +43,15 @@
 
 **Cauchy&ndash;Riemann orthogonality** &mdash; level curves of the real and imaginary parts of an analytic function intersect at right angles everywhere.
 
-<p align="center"><img src="media/prob1_contours.png" width="460" alt="Cauchy-Riemann contours"></p>
+<p align="center"><img src="images/prob1_contours.png" width="460" alt="Cauchy-Riemann contours"></p>
 
 <br>
 
 **Conformal mapping** &mdash; the Joukowsky transform maps circles to airfoil-like curves.
 
 <p>
-  <img src="media/prob2_roots.png" width="270" alt="Roots in Argand plane">
-  <img src="media/prob2_mapping.png" width="270" alt="Conformal mapping">
+  <img src="images/prob2_roots.png" width="270" alt="Roots in Argand plane">
+  <img src="images/prob2_mapping.png" width="270" alt="Conformal mapping">
 </p>
 
 *Left: sixth roots of -64 in the Argand plane. Right: images of circles under the Joukowsky map.*
@@ -64,7 +64,7 @@
 
 **Chaotic trajectory** &mdash; the path of the second mass never closes, a signature of deterministic chaos.
 
-<p align="center"><img src="media/prob4_trajectory.png" width="420" alt="Double pendulum trajectory"></p>
+<p align="center"><img src="images/prob4_trajectory.png" width="420" alt="Double pendulum trajectory"></p>
 
 </details>
 
@@ -74,7 +74,7 @@
 
 **3D random walk** &mdash; 10⁴ steps of a Wiener process in three dimensions.
 
-<p align="center"><img src="media/brownian_motion_3d.gif" width="420" alt="Brownian motion 3D"></p>
+<p align="center"><img src="images/brownian_motion_3d.gif" width="420" alt="Brownian motion 3D"></p>
 
 </details>
 
@@ -84,7 +84,7 @@
 
 **Two masses, three springs** &mdash; normal modes and energy sloshing between the two bodies.
 
-<p align="center"><img src="media/coupled_mas.gif" width="460" alt="Coupled masses"></p>
+<p align="center"><img src="images/coupled_mas.gif" width="460" alt="Coupled masses"></p>
 
 </details>
 
@@ -94,7 +94,7 @@
 
 ```
 physi/
-├── media/                  # README images &amp; GIFs
+├── images/                  # README images &amp; GIFs
 ├── src/physi/
 │   ├── brownian/           # Brownian motion (1D, 2D, 3D)
 │   ├── coupled_mas/        # Coupled spring-mass system

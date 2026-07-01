@@ -22,5 +22,8 @@ src/curricular/mathematics_methods_lab_03/images/
 *.tex
 Makefile
 
+# Images — only track the root images/ directory (README assets)
 *.png
 *.gif
+!images/
+!images/*
