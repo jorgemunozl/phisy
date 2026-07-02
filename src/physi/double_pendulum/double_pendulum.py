@@ -1,7 +1,9 @@
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 DOUBLE_PENDULUM_PATH = Path(__file__).parent
@@ -49,44 +51,6 @@ def rk4_step(f, t, u, h):
 
 
 def adaptive_rk4_step(f, t, u, h):
-    """
-    Adaptive RK4 (RKF45) step using the Runge-Kutta-Fehlberg method.
-
-    Computes both a 4th-order and a 5th-order solution from the same
-    set of evaluations.  The difference gives an estimate of the local
-    truncation error, which can be used for step-size control.
-
-    Parameters
-    ----------
-    f : callable
-        RHS function with signature f(t, u, d2theta1, d2theta2).
-    t : float
-        Current time.
-    u : ndarray
-        Current state vector.
-    h : float
-        Step size.
-
-    Returns
-    -------
-    u5 : ndarray
-        5th-order accurate solution at t + h.
-    error : ndarray
-        Element-wise estimated error (|u5 - u4|).
-    """
-    # RKF45 Butcher tableau                          # order
-    #                                                # 4th    5th
-    # 0      |
-    # 1/4    | 1/4
-    # 3/8    | 3/32      9/32
-    # 12/13  | 1932/2197  -7200/2197  7296/2197
-    # 1      | 439/216    -8          3680/513    -845/4104
-    # 1/2    | -8/27      2           -3544/2565  1859/4104  -11/40
-    # -----------------------------------------------------------
-    #        | 25/216     0           1408/2565   2197/4104  -1/5      0
-    #        | 16/135     0           6656/12825  28561/56430 -9/50    2/55
-
-    # Stage coefficients
     a2, a3, a4, a5, a6 = 1 / 4, 3 / 8, 12 / 13, 1.0, 1 / 2
 
     b21 = 1 / 4
@@ -95,9 +59,7 @@ def adaptive_rk4_step(f, t, u, h):
     b51, b52, b53, b54 = 439 / 216, -8.0, 3680 / 513, -845 / 4104
     b61, b62, b63, b64, b65 = -8 / 27, 2.0, -3544 / 2565, 1859 / 4104, -11 / 40
 
-    # 4th-order coefficients
     c1, c3, c4, c5 = 25 / 216, 1408 / 2565, 2197 / 4104, -1 / 5
-    # 5th-order coefficients
     d1, d3, d4, d5, d6 = 16 / 135, 6656 / 12825, 28561 / 56430, -9 / 50, 2 / 55
 
     k1 = h * f(t, u, d2theta1, d2theta2)
@@ -179,28 +141,40 @@ class DoublePendulumSolver:
         default=int(10e2),
         metadata={"description": "Number of simulation steps"},
     )
+    h: float = field(
+        default=0.01,
+        metadata={"description": "Step size"},
+    )
     theta_1: float = field(
         default=np.pi / 2,
         metadata={"description": "Initial angle of the first pendulum"},
     )
+    theta_1_str: str = field(
+        default="pi/2",
+        metadata={"description": "Initial angle of the first pendulum as a string"},
+    )
     theta_2: float = field(
-        default=np.pi / 2,
+        default=np.pi / 6,
         metadata={"description": "Initial angle of the second pendulum"},
+    )
+    theta_2_str: str = field(
+        default="pi/6",
+        metadata={"description": "Initial angle of the second pendulum as a string"},
     )
     omega_1: float = field(
         default=1.0,
         metadata={"description": "Initial angular velocity of the first pendulum"},
     )
     omega_2: float = field(
-        default=-1.0,
+        default=0.0,
         metadata={"description": "Initial angular velocity of the second pendulum"},
     )
     time_str: str = field(
         default="10s",
         metadata={"description": "Total simulation time as a string"},
     )
-    steps_str: str = field(
-        default="10e2",
+    h_str: str = field(
+        default="1e-2",
         metadata={"description": "Number of simulation steps as a string"},
     )
     path_numpy: Path = field(
@@ -215,27 +189,35 @@ class DoublePendulumSolver:
         default="rk4",
         metadata={"description": "Solver method to use"},
     )
+    # — internal, set by solver methods —
+    _feval_count: int | None = field(
+        default=None,
+        init=False,
+        metadata={"description": "Number of RHS evaluations in the last solve"},
+    )
 
     def __post_init__(self):
         if self.preset:
             self.set_preset(self.preset)
+
+        os.makedirs(DOUBLE_PENDULUM_PATH / "plots", exist_ok=True)
         self._build_paths()
+        self.solve()
 
     def _build_paths(self):
         # map pi to symbol
-        pi = "pi_2"
-        prefix = f"{self.time_str}_{self.steps_str}_{pi}_{pi}_{self.omega_1}_{self.omega_2}_{self.method}"
+        pi_2 = "pi_2" if self.theta_1 == np.pi / 2 else "pi_1"
+        pi_6 = "pi_6" if self.theta_2 == np.pi / 6 else "pi_1"
+        prefix = f"{self.time_str}_{self.h_str}_{pi_2}_{pi_6}_{self.omega_1}_{self.omega_2}_{self.method}"
         self.path_numpy = DOUBLE_PENDULUM_PATH / f"data/{prefix}.npy"
         self.path_animation = DOUBLE_PENDULUM_PATH / f"data/{prefix}.png"
 
-    def solve(self):
+    def solve(self, force=False):
         if self.preset:
             self.set_preset(self.preset)
             self._build_paths()
 
-        if self.path_numpy.exists():
-            print("Solution already exists!!", self.path_numpy)
-        else:
+        if force or not self.path_numpy.exists():
             print("Computing solution on", self.path_numpy)
             if self.method == "rk4":
                 self.solve_rk4()
@@ -245,27 +227,32 @@ class DoublePendulumSolver:
                 self.solve_adaptive_rk4()
             else:
                 raise ValueError(f"Unknown method: {self.method}")
+        elif self.path_numpy.exists():
+            print("Solution already exists!!", self.path_numpy)
+        return np.load(self.path_numpy)
 
     def set_preset(self, preset: str):
         if preset == "testing":
             self.time = 10
-            self.steps = 1000
-            self.steps_str = "10e3"
+            self.h = 0.001
+            self.h_str = "10e3"
             self.time_str = "10s"
         elif preset == "hard":
             self.time = 40
-            self.steps = 100_000
-            self.steps_str = "10e5"
+            self.h = 0.0001
+            self.h_str = "10e4"
             self.time_str = "40s"
         elif preset == "extreme":
             self.time = 100
-            self.steps = 10_000_000
-            self.steps_str = "10e6"
+            self.h = 0.00001
+            self.h_str = "10e5"
             self.time_str = "100s"
         else:
             raise ValueError(f"Unknown preset: {preset}")
+        self.steps = int(self.time / self.h)
 
     def build_times(self):
+        # t_span, t_eval
         return (0, self.time), np.linspace(0, self.time, self.steps)
 
     def build_initial_conditions(self):
@@ -274,16 +261,17 @@ class DoublePendulumSolver:
     def save_solution(self, u):
         np.save(self.path_numpy, u)
 
-    def solve_rk4(self, dt=None):
-        if dt is None:
-            dt = self.time / self.steps
+    def solve_rk4(self):
+        num_steps = self.steps
         u_0 = self.build_initial_conditions()
-        u = np.zeros((self.steps + 1, 4))
+        u = np.zeros((num_steps, 4))
         u[0] = u_0
-        for i in range(self.steps):
-            u[i + 1] = rk4_step(F, i * dt, u[i], dt)
+        for i in range(num_steps - 1):
+            u[i + 1] = rk4_step(F, i * self.h, u[i], self.h)
         # u = [theta_1, omega_1, theta_2, omega_2]
+        self._feval_count = 4 * self.steps  # 4 stages per RK4 step
         self.save_solution(u)
+        print(f"Saved solution to {self.path_numpy}")
         print(f"Saved solution to {self.path_numpy}")
 
     def solve_rk8(self):
@@ -300,6 +288,7 @@ class DoublePendulumSolver:
             rtol=1e-9,
             atol=1e-9,
         )
+        self._feval_count = None  # scipy DOP853 is a black box
         self.save_solution(sol.y.transpose())
         print(f"Saved solution to {self.path_numpy}")
 
@@ -328,7 +317,7 @@ class DoublePendulumSolver:
         atol : float
             Absolute tolerance for error control.
         h0 : float or None
-            Initial step size (defaults to ``time / steps``).
+            Initial step size (defaults to ``self.h``).
         h_min : float
             Minimum allowed step size.
         h_max : float or None
@@ -343,7 +332,7 @@ class DoublePendulumSolver:
         t_eval = np.linspace(0.0, tf, self.steps + 1)
 
         if h0 is None:
-            h0 = tf / self.steps
+            h0 = self.h
         if h_max is None:
             h_max = tf / 10.0
 
@@ -418,6 +407,7 @@ class DoublePendulumSolver:
         # Ensure the initial condition is exact
         u[0] = u_0
 
+        self._feval_count = 6 * (accepted + rejected)  # 6 stages per RKF45 attempt
         self.save_solution(u)
         print(
             f"Adaptive RK4 completed: {accepted} accepted, {rejected} rejected "
@@ -441,42 +431,112 @@ class DoublePendulumSolver:
         u_0, u_f = u[0], u[-1]
         return self.get_energy(u_f) - self.get_energy(u_0)
 
-    def plot_e_vs_time(self, method=None, preset=None):
+    def measure_compute(self) -> dict:
+        """
+        Force-recompute the solution and measure both wall-clock time and
+        the number of right-hand-side evaluations (work done).
+
+        Returns
+        -------
+        dict
+            Keys: method, steps, time_s, feval_count, solution.
+            ``feval_count`` is None for rk8 (scipy black-box).
+        """
+        import time
+
+        t_start = time.perf_counter()
+        solution = self.solve(force=True)
+        elapsed = time.perf_counter() - t_start
+
+        feval = self._feval_count
+        result = {
+            "method": self.method,
+            "steps": len(solution),
+            "time_s": elapsed,
+            "feval_count": feval,
+            "solution": solution,
+        }
+
+        feval_str = f"{feval:>10d}" if feval is not None else "     (n/a)"
+        print(
+            f"{'method':>14s}  |  {'steps':>8s}  |  {'time':>8s}  |  "
+            f"{'steps/s':>10s}  |  {'f-evals':>10s}"
+        )
+        print(
+            f"{self.method:>14s}  |  {len(solution):>8d}  |  "
+            f"{elapsed:>7.3f}s  |  {len(solution) / elapsed:>10.0f}  |  "
+            f"{feval_str}"
+        )
+        return result
+
+    def plot_e_vs_time(self, method=None, preset=None, scale="normal"):
         """
         Delta E against H
         """
-        import matplotlib.pyplot as plt
-
         t = np.linspace(0, self.time, self.steps)
         u = np.load(self.path_numpy)
         e_self = self.get_energy(u)
-        plt.plot(t, e_self, label=f"{self.method}")
+        if scale == "log":
+            print(f"Using log scale for {self.method}")
+            plt.plot(t, np.log(e_self), label=f"{self.method}, {self.h} log")
+        else:
+            plt.plot(t, e_self, label=f"{self.method}, {self.h}")
         # plt.axhline(e_self[0], color="r", linestyle="--")
-        if method is not None:
+        if method is not None and preset is not None:
             solver = DoublePendulumSolver(method=method, preset=preset)
-            solver.solve()
             u_odd = np.load(solver.path_numpy)
-            t = np.linspace(0, self.time, self.steps + 1)
             plt.plot(t, self.get_energy(u_odd), label=f"{method}")
             plt.axhline(self.get_energy(u_odd)[0], color="r", linestyle="--")
 
         plt.xlabel("Time")
         plt.ylabel("Energy")
+        plt.title(
+            f"{self.method}, {self.h}, {self.theta_1_str}, {self.theta_2_str}, {self.omega_1}, {self.omega_2}"
+        )
         plt.legend()
-        plt.show()
+        plt.savefig(
+            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{self.h}_energy_{scale}.png"
+        )
 
-    def plot_delta_e_vs_h(self, h_steps):
-        e_s = []
-        for h_step in h_steps:
-            # 0, 1, 2, 3, 4 -> 1, 0.1, 0.01, 0.001, 0.0001
-            u_h = self.solve_rk4(dt=(0.1) ** h_step)
-            t = np.linspace(0, self.time, self.steps + 1)
-            e_h = self.get_energy(u_h)
-            plt.plot(t, e_h, label=f"h={h_step}")
+    def plot_delta_e_vs_h(self, h_num: int = 3, h_list=None):
+        # Total time fixed, h_variable then num_h steps variable
+        if h_list is None:
+            h_list = [(0.1) ** i for i in range(h_num)]
+
+        for h_step in h_list:
+            # Clean h string for filenames (e.g. 0.001, not 0.0010000000000002)
+            h_fmt = f"{h_step:.10f}".rstrip("0").rstrip(".")
+            # Bypass presets so h=h_step isn't overwritten by set_preset()
+            solver_h = DoublePendulumSolver(
+                method=self.method,
+                time=self.time,
+                time_str=self.time_str,
+                steps=int(self.time / h_step),
+                theta_1=self.theta_1,
+                theta_2=self.theta_2,
+                omega_1=self.omega_1,
+                omega_2=self.omega_2,
+                h=h_step,
+                h_str=h_fmt,
+                preset="",
+            )
+            # __post_init__ already solved; just load the result
+            vector_state_h = np.load(solver_h.path_numpy)
+            energy_h = self.get_energy(vector_state_h)
+            t = np.linspace(0, self.time, len(energy_h))
+            plt.plot(t, energy_h, label=f"h={h_step}")
+
+        if h_list is not None:
+            prefix = "_".join(str(h) for h in h_list)
+
+        else:
+            prefix = str(h_num)
         plt.xlabel("Time")
         plt.ylabel("Energy")
         plt.legend()
-        plt.show()
+        plt.savefig(
+            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{prefix}_delta_e_vs_h.png"
+        )
 
     def compare_solutions(self, method: Literal["rk4", "rk8"], preset: str):
         solver_odd = DoublePendulumSolver(method=method, preset=preset)
