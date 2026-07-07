@@ -350,10 +350,10 @@ class DoublePendulumSolver:
 
     def set_preset(self, preset: str):
         if preset == "testing":
-            self.time = 10
+            self.time = 5
             self.h = 0.01
             self.h_str = "10e2"
-            self.time_str = "10s"
+            self.time_str = "5s"
 
         elif preset == "hard":
             self.time = 50

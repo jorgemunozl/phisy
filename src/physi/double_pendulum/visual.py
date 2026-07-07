@@ -24,6 +24,7 @@ from manim import (
     DashedLine,
     Dot,
     Line,
+    # MathTex,  # (temporarily disabled)
     Scene,
     Text,
     VGroup,
@@ -44,8 +45,8 @@ from physi.double_pendulum.double_pendulum import (
 # RK4_PATH = Path(__file__).parent / "data" / "40s_10e4_pi_2_pi_6_1.0_0.0_rk4.npy"
 # RK8_PATH = Path(__file__).parent / "data" / "40s_10e4_pi_2_pi_6_1.0_0.0_rk8.npy"
 
-RK4_PATH = Path(__file__).parent / "data" / "10s_10e2_pi_2_pi_6_1.0_0.0_rk4.npy"
-RK8_PATH = Path(__file__).parent / "data" / "10s_10e2_pi_2_pi_6_1.0_0.0_rk8.npy"
+RK4_PATH = Path(__file__).parent / "data" / "50s_10e3_pi_2_pi_6_1.0_0.0_rk4.npy"
+RK8_PATH = Path(__file__).parent / "data" / "50s_10e3_pi_2_pi_6_1.0_0.0_rk8.npy"
 
 
 # RK4_ADAPTIVE_PATH = (
@@ -54,10 +55,12 @@ RK8_PATH = Path(__file__).parent / "data" / "10s_10e2_pi_2_pi_6_1.0_0.0_rk8.npy"
 
 RK4_ADAPTIVE_PATH = RK4_PATH
 
-ANIM_DURATION = 10.0  # desired total playback duration in scene-seconds
-RENDER_FPS = 15  # must match config.quality below (ql→15, qm→30, qh/qk→60)
+RENDER_FPS = 60  # must match config.quality below (ql→15, qm→30, qh/qk→60)
 SUBSAMPLING = 1  # extra trail thinning (1 = every rendered step)
-SIM_TIME = 4.0  # total simulation time (must match solver preset)
+SIM_TIME = 50.0  # total simulation time — controls both x-axis and video duration
+
+E_MARGIN_rk4 = 1e-8  # For rk4
+E_MARGIN_rk8 = 1e-12  # For rk8
 
 
 # ── Shared helpers ────────────────────────────────────────────────────
@@ -130,7 +133,7 @@ def build_pendulum_objects(
 def compute_stride(num_frames):
     """Return (indices, time_per_step) for frame-by-frame playback."""
     min_wait = 1.0 / RENDER_FPS
-    ideal_wait = ANIM_DURATION / max(num_frames - 1, 1)
+    ideal_wait = SIM_TIME / max(num_frames - 1, 1)
     stride = max(1, int(np.ceil(min_wait / ideal_wait)))
     indices = range(0, num_frames, stride)
     return indices, stride * ideal_wait
@@ -174,21 +177,21 @@ class DoublePendulumEnergy(Scene):
             traj_rk4,
             offset,
             rod1_color=BLUE,
-            rod2_color=GREEN,
+            rod2_color=BLUE,
             mass1_color=BLUE,
-            mass2_color=GREEN,
-            trail_color=YELLOW,
+            mass2_color=BLUE,
+            trail_color=BLUE,
             scale=scale,
         )
-        # RK8 pendulum (red/orange, white trail, slightly translucent)
+        # RK8 pendulum (all red, slightly translucent)
         pts8_p1, pts8_p2, piv8, r8_1, r8_2, m8_1, m8_2, t8 = build_pendulum_objects(
             traj_rk8,
             offset,
             rod1_color=RED,
-            rod2_color=ORANGE,
+            rod2_color=RED,
             mass1_color=RED,
-            mass2_color=ORANGE,
-            trail_color=WHITE,
+            mass2_color=RED,
+            trail_color=RED,
             scale=scale,
         )
         for obj in (r8_1, r8_2, m8_1, m8_2):
@@ -216,20 +219,29 @@ class DoublePendulumEnergy(Scene):
         e_rk8 = total_energy(traj_rk8)
         e_init = e_rk4[0]
 
+        # Plot delta E = E(t) - E0 so the y-axis is centred at 0.
+        # This avoids floating-point precision issues in Manim when the
+        # absolute values (e.g. -7.5) dwarf the tiny window (e.g. 1e-8).
+        de_rk4 = e_rk4 - e_init
+        de_rk8 = e_rk8 - e_init
+
+        # Normalise: plot ΔE / margin so both axes are always [-1, 1].
+        # This means Manim never has to render tick labels like "5e-13" —
+        # it always renders plain numbers like -1, -0.5, 0, 0.5, 1.
+        # The actual scale is shown in the plot title instead.
+        norm_rk4 = de_rk4 / E_MARGIN_rk4
+        norm_rk8 = de_rk8 / E_MARGIN_rk8
+
         # Time axis
         t_arr = np.linspace(0, SIM_TIME, num_frames)
 
-        # Shared y-range for both plots (pad ±0.5 around the data range)
-        e_all = np.concatenate([e_rk4, e_rk8])
-        e_min = float(e_all.min()) - 0.5
-        e_max = float(e_all.max()) + 0.5
-
-        # ── Axes (right half) ──────────────────────────────────────────
+        # ── Axes (right half) — fixed [-1, 1] range regardless of margin
         AX_W, AX_H = 3.8, 1.8
+        FIXED_Y = [-1.0, 1.0, 0.5]
 
         ax_rk4 = Axes(
             x_range=[0, SIM_TIME, SIM_TIME / 4],
-            y_range=[e_min, e_max, (e_max - e_min) / 4],
+            y_range=FIXED_Y,
             x_length=AX_W,
             y_length=AX_H,
             axis_config={"color": WHITE, "font_size": 14},
@@ -239,7 +251,7 @@ class DoublePendulumEnergy(Scene):
 
         ax_rk8 = Axes(
             x_range=[0, SIM_TIME, SIM_TIME / 4],
-            y_range=[e_min, e_max, (e_max - e_min) / 4],
+            y_range=FIXED_Y,
             x_length=AX_W,
             y_length=AX_H,
             axis_config={"color": WHITE, "font_size": 14},
@@ -247,20 +259,22 @@ class DoublePendulumEnergy(Scene):
         )
         ax_rk8.move_to(np.array([3.0, -2.0, 0.0]))
 
-        # Labels
-        rk4_title = Text("RK4 — Total Energy", font_size=20, color=BLUE)
-        rk4_title.next_to(ax_rk4, UP, buff=0.12)
-        rk8_title = Text("RK8 — Total Energy", font_size=20, color=RED)
-        rk8_title.next_to(ax_rk8, UP, buff=0.12)
+        # Titles include the scale so the viewer knows the real units
+        rk4_title = Text(
+            f"RK4  ΔE / {E_MARGIN_rk4:.0e}", font_size=18, color=BLUE
+        ).next_to(ax_rk4, UP, buff=0.12)
+        rk8_title = Text(
+            f"RK8  ΔE / {E_MARGIN_rk8:.0e}", font_size=18, color=RED
+        ).next_to(ax_rk8, UP, buff=0.12)
 
         t_label = Text("t (s)", font_size=16, color=WHITE)
         t_label_rk4 = t_label.copy().next_to(ax_rk4, DOWN, buff=0.15)
         t_label_rk8 = t_label.copy().next_to(ax_rk8, DOWN, buff=0.15)
 
-        # Horizontal reference line at initial energy
+        # Zero reference line (ΔE = 0 ≡ perfect conservation)
         def make_ref_line(axes):
-            x0, y0, _ = axes.coords_to_point(0, e_init)
-            x1, y1, _ = axes.coords_to_point(SIM_TIME, e_init)
+            x0, y0, _ = axes.coords_to_point(0, 0)
+            x1, y1, _ = axes.coords_to_point(SIM_TIME, 0)
             return DashedLine(
                 np.array([x0, y0, 0.0]),
                 np.array([x1, y1, 0.0]),
@@ -274,14 +288,14 @@ class DoublePendulumEnergy(Scene):
 
         # Energy curves (grown frame by frame)
         graph_rk4 = VMobject(color=BLUE, stroke_width=2)
-        graph_rk4.start_new_path(ax_rk4.coords_to_point(0, e_rk4[0]))
+        graph_rk4.start_new_path(ax_rk4.coords_to_point(0, norm_rk4[0]))
 
         graph_rk8 = VMobject(color=RED, stroke_width=2)
-        graph_rk8.start_new_path(ax_rk8.coords_to_point(0, e_rk8[0]))
+        graph_rk8.start_new_path(ax_rk8.coords_to_point(0, norm_rk8[0]))
 
-        # Moving dots at the current energy value
-        dot_rk4 = Dot(ax_rk4.coords_to_point(0, e_rk4[0]), color=BLUE, radius=0.06)
-        dot_rk8 = Dot(ax_rk8.coords_to_point(0, e_rk8[0]), color=RED, radius=0.06)
+        # Moving dots at the current normalised ΔE value
+        dot_rk4 = Dot(ax_rk4.coords_to_point(0, norm_rk4[0]), color=BLUE, radius=0.06)
+        dot_rk8 = Dot(ax_rk8.coords_to_point(0, norm_rk8[0]), color=RED, radius=0.06)
 
         # Vertical divider
         divider = Line(
@@ -319,6 +333,8 @@ class DoublePendulumEnergy(Scene):
             dot_rk8,
             ref_rk4,
             ref_rk8,
+            # margin_label_rk4,
+            # margin_label_rk8,
         )
         self.wait(0.3)
 
@@ -332,22 +348,22 @@ class DoublePendulumEnergy(Scene):
             m4_1.move_to(p4_1)
             m4_2.move_to(p4_2)
             r4_1.become(Line(piv4.get_center(), p4_1, color=BLUE, stroke_width=6))
-            r4_2.become(Line(p4_1, p4_2, color=GREEN, stroke_width=5))
+            r4_2.become(Line(p4_1, p4_2, color=BLUE, stroke_width=5))
 
             m8_1.move_to(p8_1)
             m8_2.move_to(p8_2)
             r8_1.become(Line(piv4.get_center(), p8_1, color=RED, stroke_width=6))
-            r8_2.become(Line(p8_1, p8_2, color=ORANGE, stroke_width=5))
+            r8_2.become(Line(p8_1, p8_2, color=RED, stroke_width=5))
 
             # --- Trails ---
             stride_a = int(np.ceil(t_step * RENDER_FPS))
             if i % (stride_a * SUBSAMPLING) == 0:
-                add_trail_dot(t4, p4_2, i, num_frames, YELLOW, stride_a)
-                add_trail_dot(t8, p8_2, i, num_frames, WHITE, stride_a)
+                add_trail_dot(t4, p4_2, i, num_frames, BLUE, stride_a)
+                add_trail_dot(t8, p8_2, i, num_frames, RED, stride_a)
 
-            # --- Energy graphs: extend line to current point ---
-            pt_rk4 = ax_rk4.coords_to_point(t_arr[i], e_rk4[i])
-            pt_rk8 = ax_rk8.coords_to_point(t_arr[i], e_rk8[i])
+            # --- Energy graphs: extend line to current normalised ΔE point ---
+            pt_rk4 = ax_rk4.coords_to_point(t_arr[i], norm_rk4[i])
+            pt_rk8 = ax_rk8.coords_to_point(t_arr[i], norm_rk8[i])
 
             graph_rk4.add_line_to(pt_rk4)
             dot_rk4.move_to(pt_rk4)
@@ -816,7 +832,7 @@ if __name__ == "__main__":
     # ──────────────────────────────────────────────────────────────────
 
     config.progress_bar = "display"
-    config.quality = "low_quality"  # -qh  (60 fps)
+    config.quality = "high_quality"  # -qh  (60 fps)
     config.preview = True
     config.disable_caching = False
 

@@ -86,17 +86,18 @@ Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equatio
 Using this motivation Runge and Kutta propose the follow form to obtain the solution.
 $ k_i = f(t_n + c_i h, y_n + h sum_j a_(i j) k_j) and y_(n+1) = y_n + h sum_i b_i k_i $
 
-
 #grid(
-  columns: (1fr, 1fr),
+  columns: (2fr, 1fr),
   gutter: 1em,
   [
-    _How do you get such coefficients?_
-
-    Using *Taylor Polinomial* expansion of $y(t+h)$ $(y'=f(t, y))$!!
+    _How do you obtain coefficients?_ $(a_(i j) , b_i, c_i)$
+    $ sum_(j=1) a_(i j) = c_i $
+    Using the *Taylor Polinomial* expansion of $y(t+h)$ $(y'=f(t, y))$!
 
     Therefore you asure:
     $ y_1 - y(t_0 + h) = cal(O)(h^(p+1)) text("as") h -> 0 $
+
+
   ],
   [
     #figure(
@@ -111,17 +112,20 @@ $ k_i = f(t_n + c_i h, y_n + h sum_j a_(i j) k_j) and y_(n+1) = y_n + h sum_i b_
   columns: (1fr, 1fr),
   gutter: 1em,
   [
-    Parameters free butcher table of rk4
+    #figure(
+      image("images/rk4_t.png", width: 60%),
+      caption: [Tableau for RK4],
+    )
   ],
   [
-    #figure(
-      image("images/table.png", width: 60%),
-      caption: [The coefficients are displayed using a matrix notation],
-    )
+
+
+    - Fixed-step variant: adaptive control disabled, $h$ held constant.
+    - Coefficients loaded directly from `scipy.integrate.DOP853` — bit-for-bit reproducible
   ],
 )
 
-
+Global truncation error scales as $cal(O)(h^4)$ for RK4 and $cal(O)(h^8)$ for RK8 — for the same $h$, RK8 error is roughly $h^4$ times smaller, which for $h=0.01$ is a factor of $10^8$.
 
 == Adaptive step-size control
 
