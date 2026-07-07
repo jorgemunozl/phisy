@@ -50,6 +50,123 @@ def rk4_step(f, t, u, h):
     return u + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
 
+# --- DOP853 Butcher tableau (Hairer, Nørsett, Wanner 1993) ---
+# 12-stage explicit RK method, order 8 (FSAL: 13 effective stages).
+# Coefficients from scipy.integrate._ivp.dop853_coefficients.
+
+_RK8_C = np.array(
+    [
+        0.0,
+        0.0526001519587677318785587544488,
+        0.0789002279381515978178381316732,
+        0.118350341907227396726757197510,
+        0.281649658092772603273242802490,
+        0.333333333333333333333333333333,
+        0.25,
+        0.307692307692307692307692307692,
+        0.651282051282051282051282051282,
+        0.6,
+        0.857142857142857142857142857142,
+        1.0,
+    ]
+)
+
+_RK8_A = np.zeros((12, 12))
+
+_RK8_A[1, 0] = 5.26001519587677318785587544488e-2
+
+_RK8_A[2, 0] = 1.97250569845378994544595329183e-2
+_RK8_A[2, 1] = 5.91751709536136983633785987549e-2
+
+_RK8_A[3, 0] = 2.95875854768068491816892993775e-2
+_RK8_A[3, 2] = 8.87627564304205475450678981324e-2
+
+_RK8_A[4, 0] = 2.41365134159266685502369798665e-1
+_RK8_A[4, 2] = -8.84549479328286085344864962717e-1
+_RK8_A[4, 3] = 9.24834003261792003115737966543e-1
+
+_RK8_A[5, 0] = 3.7037037037037037037037037037e-2
+_RK8_A[5, 3] = 1.70828608729473871279604482173e-1
+_RK8_A[5, 4] = 1.25467687566822425016691814123e-1
+
+_RK8_A[6, 0] = 3.7109375e-2
+_RK8_A[6, 3] = 1.70252211019544039314978060272e-1
+_RK8_A[6, 4] = 6.02165389804559606850219397283e-2
+_RK8_A[6, 5] = -1.7578125e-2
+
+_RK8_A[7, 0] = 3.70920001185047927108779319836e-2
+_RK8_A[7, 3] = 1.70383925712239993810214054705e-1
+_RK8_A[7, 4] = 1.07262030446373284651809199168e-1
+_RK8_A[7, 5] = -1.53194377486244017527936158236e-2
+_RK8_A[7, 6] = 8.27378916381402288758473766002e-3
+
+_RK8_A[8, 0] = 6.24110958716075717114429577812e-1
+_RK8_A[8, 3] = -3.36089262944694129406857109825
+_RK8_A[8, 4] = -8.68219346841726006818189891453e-1
+_RK8_A[8, 5] = 2.75920996994467083049415600797e1
+_RK8_A[8, 6] = 2.01540675504778934086186788979e1
+_RK8_A[8, 7] = -4.34898841810699588477366255144e1
+
+_RK8_A[9, 0] = 4.77662536438264365890433908527e-1
+_RK8_A[9, 3] = -2.48811461997166764192642586468
+_RK8_A[9, 4] = -5.90290826836842996371446475743e-1
+_RK8_A[9, 5] = 2.12300514481811942347288949897e1
+_RK8_A[9, 6] = 1.52792336328824235832596922938e1
+_RK8_A[9, 7] = -3.32882109689848629194453265587e1
+_RK8_A[9, 8] = -2.03312017085086261358222928593e-2
+
+_RK8_A[10, 0] = -9.3714243008598732571704021658e-1
+_RK8_A[10, 3] = 5.18637242884406370830023853209
+_RK8_A[10, 4] = 1.09143734899672957818500254654
+_RK8_A[10, 5] = -8.14978701074692612513997267357
+_RK8_A[10, 6] = -1.85200656599969598641566180701e1
+_RK8_A[10, 7] = 2.27394870993505042818970056734e1
+_RK8_A[10, 8] = 2.49360555267965238987089396762
+_RK8_A[10, 9] = -3.0467644718982195003823669022
+
+_RK8_A[11, 0] = 2.27331014751653820792359768449
+_RK8_A[11, 3] = -1.05344954667372501984066689879e1
+_RK8_A[11, 4] = -2.00087205822486249909675718444
+_RK8_A[11, 5] = -1.79589318631187989172765950534e1
+_RK8_A[11, 6] = 2.79488845294199600508499808837e1
+_RK8_A[11, 7] = -2.85899827713502369474065508674
+_RK8_A[11, 8] = -8.87285693353062954433549289258
+_RK8_A[11, 9] = 1.23605671757943030647266201528e1
+_RK8_A[11, 10] = 6.43392746015763530355970484046e-1
+
+# 8th-order weights (FSAL property: B = full-A[12, :12])
+_RK8_B = np.array(
+    [
+        5.42937341165687622380535766363e-2,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.45031289275240888144113950566,
+        1.89151789931450038304281599044,
+        -5.8012039600105847814672114227,
+        3.1116436695781989440891606237e-1,
+        -1.52160949662516078556178806805e-1,
+        2.01365400804030348374776537501e-1,
+        4.47106157277725905176885569043e-2,
+    ]
+)
+
+
+def rk8_step(f, t, u, h):
+    """Fixed-step DOP853 (8th-order Runge-Kutta) — 12 stages."""
+    n = len(u)
+    k = np.zeros((12, n))
+
+    k[0] = h * f(t, u, d2theta1, d2theta2)
+
+    for i in range(1, 12):
+        u_i = u + np.dot(_RK8_A[i, :i], k[:i])
+        k[i] = h * f(t + _RK8_C[i] * h, u_i, d2theta1, d2theta2)
+
+    return u + np.dot(_RK8_B, k)
+
+
 def adaptive_rk4_step(f, t, u, h):
     a2, a3, a4, a5, a6 = 1 / 4, 3 / 8, 12 / 13, 1.0, 1 / 2
 
@@ -133,7 +250,7 @@ class DoublePendulumSolver:
         default=10.0,
         metadata={"description": "Total simulation time in seconds"},
     )
-    preset: str = field(
+    preset: Literal["testing", "hard", "extreme"] = field(
         default="hard",
         metadata={"description": "Preset to use for simulation"},
     )
@@ -234,19 +351,20 @@ class DoublePendulumSolver:
     def set_preset(self, preset: str):
         if preset == "testing":
             self.time = 10
+            self.h = 0.01
+            self.h_str = "10e2"
+            self.time_str = "10s"
+
+        elif preset == "hard":
+            self.time = 50
             self.h = 0.001
             self.h_str = "10e3"
-            self.time_str = "10s"
-        elif preset == "hard":
-            self.time = 40
-            self.h = 0.0001
-            self.h_str = "10e4"
-            self.time_str = "40s"
+            self.time_str = "50s"
         elif preset == "extreme":
-            self.time = 100
+            self.time = 60
             self.h = 0.00001
             self.h_str = "10e5"
-            self.time_str = "100s"
+            self.time_str = "60s"
         else:
             raise ValueError(f"Unknown preset: {preset}")
         self.steps = int(self.time / self.h)
@@ -275,21 +393,15 @@ class DoublePendulumSolver:
         print(f"Saved solution to {self.path_numpy}")
 
     def solve_rk8(self):
-        from scipy.integrate import solve_ivp
-
+        num_steps = self.steps
         u_0 = self.build_initial_conditions()
-        t_span, t_eval = self.build_times()
-        sol = solve_ivp(
-            rhs,
-            t_span,
-            u_0,
-            method="DOP853",
-            t_eval=t_eval,
-            rtol=1e-9,
-            atol=1e-9,
-        )
-        self._feval_count = None  # scipy DOP853 is a black box
-        self.save_solution(sol.y.transpose())
+        u = np.zeros((num_steps, 4))
+        u[0] = u_0
+        for i in range(num_steps - 1):
+            u[i + 1] = rk8_step(F, i * self.h, u[i], self.h)
+        # u = [theta_1, omega_1, theta_2, omega_2]
+        self._feval_count = 12 * self.steps  # 12 stages per RK8 step
+        self.save_solution(u)
         print(f"Saved solution to {self.path_numpy}")
 
     def solve_adaptive_rk4(
@@ -482,6 +594,9 @@ class DoublePendulumSolver:
         else:
             plt.plot(t, e_self, label=f"{self.method}, {self.h}")
         # plt.axhline(e_self[0], color="r", linestyle="--")
+        path_save = (
+            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{self.h}_energy_{scale}.png"
+        )
         if method is not None and preset is not None:
             solver = DoublePendulumSolver(method=method, preset=preset)
             u_odd = np.load(solver.path_numpy)
@@ -494,18 +609,21 @@ class DoublePendulumSolver:
             f"{self.method}, {self.h}, {self.theta_1_str}, {self.theta_2_str}, {self.omega_1}, {self.omega_2}"
         )
         plt.legend()
-        plt.savefig(
-            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{self.h}_energy_{scale}.png"
-        )
+        plt.savefig(path_save)
+        print(f"Saved energy plot to {path_save}")
 
-    def plot_delta_e_vs_h(self, h_num: int = 3, h_list=None):
+    def plot_delta_e_vs_h(self, h_num, h_list=None):
         # Total time fixed, h_variable then num_h steps variable
         if h_list is None:
-            h_list = [(0.1) ** i for i in range(h_num)]
+            h_list = [(0.1) ** i for i in h_num]
 
         for h_step in h_list:
+
+            def clean_string(h: float | str) -> str:
+                return f"{h:.10f}".rstrip("0").rstrip(".")
+
             # Clean h string for filenames (e.g. 0.001, not 0.0010000000000002)
-            h_fmt = f"{h_step:.10f}".rstrip("0").rstrip(".")
+            h_fmt = clean_string(h_step)
             # Bypass presets so h=h_step isn't overwritten by set_preset()
             solver_h = DoublePendulumSolver(
                 method=self.method,
@@ -527,16 +645,16 @@ class DoublePendulumSolver:
             plt.plot(t, energy_h, label=f"h={h_step}")
 
         if h_list is not None:
-            prefix = "_".join(str(h) for h in h_list)
+            prefix = "_".join(clean_string(h) for h in h_list)
 
         else:
-            prefix = str(h_num)
+            prefix = clean_string(str(h_num))
         plt.xlabel("Time")
         plt.ylabel("Energy")
         plt.legend()
-        plt.savefig(
-            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{prefix}_delta_e_vs_h.png"
-        )
+        path = f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{prefix}_delta_e_vs_h.png"
+        print(f"Saved delta energy plot to {path}")
+        plt.savefig(path)
 
     def compare_solutions(self, method: Literal["rk4", "rk8"], preset: str):
         solver_odd = DoublePendulumSolver(method=method, preset=preset)

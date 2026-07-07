@@ -11,6 +11,8 @@ src/curricular/mathematics_methods_lab_03/images/
 *.npy
 *.svg
 
+*.webp
+
 *.mp4
 
 # Virtual environments

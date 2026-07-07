@@ -48,32 +48,80 @@
   [
     #figure(
       image("images/dp.webp"),
-      caption: "Double Pendulum",
+      caption: [Double Pendulum],
+    )
+  ],
+)
+
+== Motivatig Kutta
+
+Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 1em,
+  [
+    #figure(
+      image("images/explicit.png"),
+      caption: [Improved Euler $y_(n+1) = y_n + h/2(k_1 + k_2)$],
+    )
+  ],
+  [
+    #figure(
+      image("images/mid.png"),
+      caption: [Midpoint Runge Kutta
+        $y_n+h k_2$],
+    )
+  ],
+  [
+    #figure(
+      image("images/rk.png"),
+      caption: [Runge Kutta Order $3$],
     )
   ],
 )
 
 == From Taylor series to Runge Kutta
-Instead of the use Euler:
-$
-  y_(n+1) = y_n + h f(y_n, t_n)
-$
-We popose:
-$
-  y_(n+1) = y_n + h (a_1 k_1 + a_2 k_2)
-$
 
-Develop the Taylor series expansion to obtain the coefficients.
+Using this motivation Runge and Kutta propose the follow form to obtain the solution.
+$ k_i = f(t_n + c_i h, y_n + h sum_j a_(i j) k_j) and y_(n+1) = y_n + h sum_i b_i k_i $
 
-Mid point, middle points and
 
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1em,
+  [
+    _How do you get such coefficients?_
+
+    Using *Taylor Polinomial* expansion of $y(t+h)$ $(y'=f(t, y))$!!
+
+    Therefore you asure:
+    $ y_1 - y(t_0 + h) = cal(O)(h^(p+1)) text("as") h -> 0 $
+  ],
+  [
+    #figure(
+      image("images/table.png", width: 60%),
+      caption: [The coefficients are displayed using a matrix notation],
+    )
+  ],
+)
 == Working examples with  RK4 and RK8
 
-To obtain the coefficients you would need to develop a third order Taylor series expansion.
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 1em,
+  [
+    Parameters free butcher table of rk4
+  ],
+  [
+    #figure(
+      image("images/table.png", width: 60%),
+      caption: [The coefficients are displayed using a matrix notation],
+    )
+  ],
+)
 
-You use the Butcher tableau to obtain the coefficients, or the Butcher three.
 
-For RK4 and RK8.
 
 == Adaptive step-size control
 
@@ -86,7 +134,6 @@ Adaptive step-size control.
 == Reference Solution Strategy
 
 Reference solution strategy.
-
 
 == Energy Drift Comparison
 

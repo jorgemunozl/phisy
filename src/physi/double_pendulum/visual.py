@@ -2,7 +2,7 @@
 Visualisations for the double pendulum.
 
 Available scenes (set via SCENE variable at the bottom of this file):
-  - DoublePendulumEnergy    : single pendulum + live energy bar chart (original)
+  - DoublePendulumEnergy    : two overlaid pendulums + live energy-vs-time plots
   - DoublePendulumSideBySide: RK4 vs RK8 side by side
   - DoublePendulumOverlay   : RK4 vs RK8 superimposed on the same pivot
 """
@@ -12,23 +12,26 @@ from pathlib import Path
 import numpy as np
 from manim import (
     BLUE,
+    DOWN,
     GREEN,
     ORANGE,
     RED,
     RIGHT,
+    UP,
     WHITE,
     YELLOW,
+    Axes,
+    DashedLine,
     Dot,
     Line,
-    Rectangle,
     Scene,
     Text,
     VGroup,
+    VMobject,
 )
 
 # Physical parameters — kept in sync with main.py
-from .double_pendulum import (
-    GRAVITY,
+from physi.double_pendulum.double_pendulum import (
     L1,
     L2,
     M1,
@@ -38,15 +41,23 @@ from .double_pendulum import (
 )
 
 # ── Settings ──────────────────────────────────────────────────────────
-RK4_PATH = Path(__file__).parent / "data" / "40s_10e5_pi_2_pi_2_1.0_-1.0_rk4.npy"
-RK8_PATH = Path(__file__).parent / "data" / "40s_10e5_pi_2_pi_2_1.0_-1.0_rk8.npy"
-RK4_ADAPTIVE_PATH = (
-    Path(__file__).parent / "data" / "40s_10e5_pi_2_pi_2_1.0_-1.0_rk4_adaptive.npy"
-)
+# RK4_PATH = Path(__file__).parent / "data" / "40s_10e4_pi_2_pi_6_1.0_0.0_rk4.npy"
+# RK8_PATH = Path(__file__).parent / "data" / "40s_10e4_pi_2_pi_6_1.0_0.0_rk8.npy"
 
-ANIM_DURATION = 30.0  # desired total playback duration in scene-seconds
-RENDER_FPS = 30  # must match config.quality below (ql→15, qm→30, qh/qk→60)
+RK4_PATH = Path(__file__).parent / "data" / "10s_10e2_pi_2_pi_6_1.0_0.0_rk4.npy"
+RK8_PATH = Path(__file__).parent / "data" / "10s_10e2_pi_2_pi_6_1.0_0.0_rk8.npy"
+
+
+# RK4_ADAPTIVE_PATH = (
+#    Path(__file__).parent / "data" / "40s_10e5_pi_2_pi_2_1.0_-1.0_rk4_adaptive.npy"
+# )
+
+RK4_ADAPTIVE_PATH = RK4_PATH
+
+ANIM_DURATION = 10.0  # desired total playback duration in scene-seconds
+RENDER_FPS = 15  # must match config.quality below (ql→15, qm→30, qh/qk→60)
 SUBSAMPLING = 1  # extra trail thinning (1 = every rendered step)
+SIM_TIME = 4.0  # total simulation time (must match solver preset)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────
@@ -134,36 +145,33 @@ def add_trail_dot(trail, pt, i, num_frames, color, stride):
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  Scene 1 — original: pendulum + live energy bar chart
+#  Scene 1 — two overlaid pendulums + live energy-vs-time line plots
 # ══════════════════════════════════════════════════════════════════════
 
 
 class DoublePendulumEnergy(Scene):
     """
-    Left half  → double-pendulum animation.
-    Right half → live bar chart: kinetic (blue), potential (red), total (yellow).
+    Left half  → two overlaid pendulums (RK4 blue/green, RK8 red/orange).
+    Top right  → live line plot: total energy vs time (RK4).
+    Bottom right → live line plot: total energy vs time (RK8).
     """
 
     def construct(self):
-        traj = np.load(RK4_PATH)
-        num_frames = len(traj)
+        traj_rk4, _, traj_rk8, num_frames = load_aligned_trajectories()
 
-        # Cartesian coordinates
-        x1, y1, x2, y2 = cartesian_from_traj(traj)
-
-        # Energy arrays
-        ke_arr = calc_kinetic_energy(
-            M1, L1, traj[:, 1], M2, L2, traj[:, 3], traj[:, 0] - traj[:, 2]
+        # ── Pendulum setup (left half) ─────────────────────────────────
+        _, _, x2_4, y2_4 = cartesian_from_traj(traj_rk4)
+        _, _, x2_8, y2_8 = cartesian_from_traj(traj_rk8)
+        scale = compute_scale(
+            np.concatenate([x2_4, x2_8]),
+            np.concatenate([y2_4, y2_8]),
+            screen_half_width=3.0,
         )
-        pe_arr = calc_potential_energy(M1, L1, M2, L2, traj[:, 0], traj[:, 2])
-        total_arr = ke_arr + pe_arr
-
-        # Scale & offset for the left-half pendulum
-        scale = compute_scale(x2, y2, screen_half_width=2.5)
         offset = np.array([-3.5, 0.0, 0.0])
 
-        pts_p1, pts_p2, pivot, rod1, rod2, mass1, mass2, trail = build_pendulum_objects(
-            traj,
+        # RK4 pendulum (blue/green, yellow trail)
+        pts4_p1, pts4_p2, piv4, r4_1, r4_2, m4_1, m4_2, t4 = build_pendulum_objects(
+            traj_rk4,
             offset,
             rod1_color=BLUE,
             rod2_color=GREEN,
@@ -172,120 +180,180 @@ class DoublePendulumEnergy(Scene):
             trail_color=YELLOW,
             scale=scale,
         )
+        # RK8 pendulum (red/orange, white trail, slightly translucent)
+        pts8_p1, pts8_p2, piv8, r8_1, r8_2, m8_1, m8_2, t8 = build_pendulum_objects(
+            traj_rk8,
+            offset,
+            rod1_color=RED,
+            rod2_color=ORANGE,
+            mass1_color=RED,
+            mass2_color=ORANGE,
+            trail_color=WHITE,
+            scale=scale,
+        )
+        for obj in (r8_1, r8_2, m8_1, m8_2):
+            obj.set_opacity(0.7)
+
+        # Legend (top-left corner)
+        legend = VGroup(
+            Dot(radius=0.08, color=BLUE).move_to(np.array([-6.5, 3.5, 0.0])),
+            Text("RK4", font_size=18, color=BLUE).next_to(
+                np.array([-6.5, 3.5, 0.0]), RIGHT, buff=0.15
+            ),
+            Dot(radius=0.08, color=RED).move_to(np.array([-6.5, 3.1, 0.0])),
+            Text("RK8", font_size=18, color=RED).next_to(
+                np.array([-6.5, 3.1, 0.0]), RIGHT, buff=0.15
+            ),
+        )
+
+        # ── Energy arrays ──────────────────────────────────────────────
+        def total_energy(traj):
+            return calc_kinetic_energy(
+                M1, L1, traj[:, 1], M2, L2, traj[:, 3], traj[:, 0] - traj[:, 2]
+            ) + calc_potential_energy(M1, L1, M2, L2, traj[:, 0], traj[:, 2])
+
+        e_rk4 = total_energy(traj_rk4)
+        e_rk8 = total_energy(traj_rk8)
+        e_init = e_rk4[0]
+
+        # Time axis
+        t_arr = np.linspace(0, SIM_TIME, num_frames)
+
+        # Shared y-range for both plots (pad ±0.5 around the data range)
+        e_all = np.concatenate([e_rk4, e_rk8])
+        e_min = float(e_all.min()) - 0.5
+        e_max = float(e_all.max()) + 0.5
+
+        # ── Axes (right half) ──────────────────────────────────────────
+        AX_W, AX_H = 3.8, 1.8
+
+        ax_rk4 = Axes(
+            x_range=[0, SIM_TIME, SIM_TIME / 4],
+            y_range=[e_min, e_max, (e_max - e_min) / 4],
+            x_length=AX_W,
+            y_length=AX_H,
+            axis_config={"color": WHITE, "font_size": 14},
+            tips=False,
+        )
+        ax_rk4.move_to(np.array([3.0, 2.0, 0.0]))
+
+        ax_rk8 = Axes(
+            x_range=[0, SIM_TIME, SIM_TIME / 4],
+            y_range=[e_min, e_max, (e_max - e_min) / 4],
+            x_length=AX_W,
+            y_length=AX_H,
+            axis_config={"color": WHITE, "font_size": 14},
+            tips=False,
+        )
+        ax_rk8.move_to(np.array([3.0, -2.0, 0.0]))
+
+        # Labels
+        rk4_title = Text("RK4 — Total Energy", font_size=20, color=BLUE)
+        rk4_title.next_to(ax_rk4, UP, buff=0.12)
+        rk8_title = Text("RK8 — Total Energy", font_size=20, color=RED)
+        rk8_title.next_to(ax_rk8, UP, buff=0.12)
+
+        t_label = Text("t (s)", font_size=16, color=WHITE)
+        t_label_rk4 = t_label.copy().next_to(ax_rk4, DOWN, buff=0.15)
+        t_label_rk8 = t_label.copy().next_to(ax_rk8, DOWN, buff=0.15)
+
+        # Horizontal reference line at initial energy
+        def make_ref_line(axes):
+            x0, y0, _ = axes.coords_to_point(0, e_init)
+            x1, y1, _ = axes.coords_to_point(SIM_TIME, e_init)
+            return DashedLine(
+                np.array([x0, y0, 0.0]),
+                np.array([x1, y1, 0.0]),
+                color=WHITE,
+                stroke_opacity=0.35,
+                dash_length=0.1,
+            )
+
+        ref_rk4 = make_ref_line(ax_rk4)
+        ref_rk8 = make_ref_line(ax_rk8)
+
+        # Energy curves (grown frame by frame)
+        graph_rk4 = VMobject(color=BLUE, stroke_width=2)
+        graph_rk4.start_new_path(ax_rk4.coords_to_point(0, e_rk4[0]))
+
+        graph_rk8 = VMobject(color=RED, stroke_width=2)
+        graph_rk8.start_new_path(ax_rk8.coords_to_point(0, e_rk8[0]))
+
+        # Moving dots at the current energy value
+        dot_rk4 = Dot(ax_rk4.coords_to_point(0, e_rk4[0]), color=BLUE, radius=0.06)
+        dot_rk8 = Dot(ax_rk8.coords_to_point(0, e_rk8[0]), color=RED, radius=0.06)
 
         # Vertical divider
         divider = Line(
-            np.array([0.0, -4.2, 0.0]),
-            np.array([0.0, 4.2, 0.0]),
+            np.array([-0.6, -4.2, 0.0]),
+            np.array([-0.6, 4.2, 0.0]),
             color=WHITE,
             stroke_width=1.0,
             stroke_opacity=0.35,
         )
 
-        # ── Energy chart (right half) ────────────────────────────────
-        BAR_W = 0.85
-        BAR_X = {"ke": 2.0, "pe": 3.8, "total": 5.6}
-        CHART_Y_MIN = -3.0
-        CHART_Y_MAX = 3.2
-
-        all_vals = np.concatenate([ke_arr, pe_arr, total_arr])
-        e_min = float(all_vals.min())
-        e_max = float(all_vals.max())
-        pad = 0.1 * max(e_max - e_min, 1.0)
-        e_min -= pad
-        e_max += pad
-
-        def e2y(e):
-            return CHART_Y_MIN + (e - e_min) / (e_max - e_min) * (
-                CHART_Y_MAX - CHART_Y_MIN
-            )
-
-        zero_y = e2y(0.0)
-
-        def make_bar(x, val, color):
-            y_top = e2y(float(val))
-            h = max(abs(y_top - zero_y), 0.02)
-            cy = (y_top + zero_y) / 2.0
-            bar = Rectangle(
-                width=BAR_W,
-                height=h,
-                color=color,
-                fill_color=color,
-                fill_opacity=0.75,
-                stroke_width=1,
-                stroke_color=color,
-            )
-            bar.move_to(np.array([x, cy, 0.0]))
-            return bar
-
-        ke_bar = make_bar(BAR_X["ke"], ke_arr[0], BLUE)
-        pe_bar = make_bar(BAR_X["pe"], pe_arr[0], RED)
-        tot_bar = make_bar(BAR_X["total"], total_arr[0], YELLOW)
-
-        x_left = min(BAR_X.values()) - BAR_W * 0.7
-        x_right = max(BAR_X.values()) + BAR_W * 0.7
-        zero_line = Line(
-            np.array([x_left, zero_y, 0.0]),
-            np.array([x_right, zero_y, 0.0]),
-            color=WHITE,
-            stroke_width=1.5,
-            stroke_opacity=0.55,
-        )
-        zero_label = Text("0", font_size=18, color=WHITE).move_to(
-            np.array([x_left - 0.25, zero_y, 0.0])
-        )
-
-        lbl_y = CHART_Y_MIN - 0.45
-        ke_lbl = Text("KE", font_size=22, color=BLUE).move_to(
-            np.array([BAR_X["ke"], lbl_y, 0.0])
-        )
-        pe_lbl = Text("PE", font_size=22, color=RED).move_to(
-            np.array([BAR_X["pe"], lbl_y, 0.0])
-        )
-        tot_lbl = Text("Total", font_size=22, color=YELLOW).move_to(
-            np.array([BAR_X["total"], lbl_y, 0.0])
-        )
-        title = Text("Energy", font_size=26, color=WHITE).move_to(
-            np.array([(BAR_X["ke"] + BAR_X["total"]) / 2, CHART_Y_MAX + 0.45, 0.0])
-        )
-
+        # ── Add to scene ───────────────────────────────────────────────
         self.add(
-            pivot,
-            trail,
-            rod1,
-            rod2,
-            mass1,
-            mass2,
+            piv4,
+            t4,
+            t8,
+            r4_1,
+            r4_2,
+            m4_1,
+            m4_2,
+            r8_1,
+            r8_2,
+            m8_1,
+            m8_2,
+            legend,
             divider,
-            ke_bar,
-            pe_bar,
-            tot_bar,
-            zero_line,
-            zero_label,
-            ke_lbl,
-            pe_lbl,
-            tot_lbl,
-            title,
+            ax_rk4,
+            ax_rk8,
+            rk4_title,
+            rk8_title,
+            t_label_rk4,
+            t_label_rk8,
+            graph_rk4,
+            graph_rk8,
+            dot_rk4,
+            dot_rk8,
+            ref_rk4,
+            ref_rk8,
         )
         self.wait(0.3)
 
+        # ── Animation loop ─────────────────────────────────────────────
         indices, t_step = compute_stride(num_frames)
         for i in indices:
-            p1, p2 = pts_p1[i], pts_p2[i]
+            # --- Pendulum positions ---
+            p4_1, p4_2 = pts4_p1[i], pts4_p2[i]
+            p8_1, p8_2 = pts8_p1[i], pts8_p2[i]
 
-            mass1.move_to(p1)
-            mass2.move_to(p2)
-            rod1.become(Line(pivot.get_center(), p1, color=BLUE, stroke_width=6))
-            rod2.become(Line(p1, p2, color=GREEN, stroke_width=5))
+            m4_1.move_to(p4_1)
+            m4_2.move_to(p4_2)
+            r4_1.become(Line(piv4.get_center(), p4_1, color=BLUE, stroke_width=6))
+            r4_2.become(Line(p4_1, p4_2, color=GREEN, stroke_width=5))
 
-            if i % int(np.ceil(t_step * RENDER_FPS) * SUBSAMPLING) == 0:
-                add_trail_dot(
-                    trail, p2, i, num_frames, YELLOW, int(np.ceil(t_step * RENDER_FPS))
-                )
+            m8_1.move_to(p8_1)
+            m8_2.move_to(p8_2)
+            r8_1.become(Line(piv4.get_center(), p8_1, color=RED, stroke_width=6))
+            r8_2.become(Line(p8_1, p8_2, color=ORANGE, stroke_width=5))
 
-            ke_bar.become(make_bar(BAR_X["ke"], ke_arr[i], BLUE))
-            pe_bar.become(make_bar(BAR_X["pe"], pe_arr[i], RED))
-            tot_bar.become(make_bar(BAR_X["total"], total_arr[i], YELLOW))
+            # --- Trails ---
+            stride_a = int(np.ceil(t_step * RENDER_FPS))
+            if i % (stride_a * SUBSAMPLING) == 0:
+                add_trail_dot(t4, p4_2, i, num_frames, YELLOW, stride_a)
+                add_trail_dot(t8, p8_2, i, num_frames, WHITE, stride_a)
+
+            # --- Energy graphs: extend line to current point ---
+            pt_rk4 = ax_rk4.coords_to_point(t_arr[i], e_rk4[i])
+            pt_rk8 = ax_rk8.coords_to_point(t_arr[i], e_rk8[i])
+
+            graph_rk4.add_line_to(pt_rk4)
+            dot_rk4.move_to(pt_rk4)
+
+            graph_rk8.add_line_to(pt_rk8)
+            dot_rk8.move_to(pt_rk8)
 
             self.wait(t_step)
 
@@ -741,16 +809,16 @@ if __name__ == "__main__":
     from manim import config
 
     # ── Choose scene ──────────────────────────────────────────────────
-    SCENE = "DoublePendulumThreeWay"
+    # SCENE = "DoublePendulumThreeWay"
     # SCENE = "DoublePendulumOverlay"
     # SCENE = "DoublePendulumSideBySide"
-    # SCENE = "DoublePendulumEnergy"
+    SCENE = "DoublePendulumEnergy"
     # ──────────────────────────────────────────────────────────────────
 
     config.progress_bar = "display"
-    config.quality = "medium_quality"  # -qm  (30 fps)
+    config.quality = "low_quality"  # -qh  (60 fps)
     config.preview = True
-    config.disable_caching = True
+    config.disable_caching = False
 
     scene_class = {
         "DoublePendulumEnergy": DoublePendulumEnergy,
