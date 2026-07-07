@@ -86,50 +86,85 @@ Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equatio
 Using this motivation Runge and Kutta propose the follow form to obtain the solution.
 $ k_i = f(t_n + c_i h, y_n + h sum_j a_(i j) k_j) and y_(n+1) = y_n + h sum_i b_i k_i $
 
+_How do you obtain coefficients $(a_(i j) , b_i, c_i)$?_
+
 #grid(
-  columns: (2fr, 1fr),
+  columns: (2fr, 0.7fr),
   gutter: 1em,
   [
-    _How do you obtain coefficients?_ $(a_(i j) , b_i, c_i)$
     $ sum_(j=1) a_(i j) = c_i $
-    Using the *Taylor Polinomial* expansion of $y(t+h)$ $(y'=f(t, y))$!
+    Using the *Taylor Polinomial* expansion of $y(t+h)$, $y'=f(t, y)$.
 
     Therefore you asure:
     $ y_1 - y(t_0 + h) = cal(O)(h^(p+1)) text("as") h -> 0 $
 
-
   ],
   [
     #figure(
-      image("images/table.png", width: 60%),
-      caption: [The coefficients are displayed using a matrix notation],
+      image("images/table.png", width: 120%),
+      caption: [RK coefficients],
     )
   ],
 )
-== Working examples with  RK4 and RK8
+== Working example with  RK4 and RK8
 
 #grid(
   columns: (1fr, 1fr),
   gutter: 1em,
   [
     #figure(
-      image("images/rk4_t.png", width: 60%),
+      image("images/rk4_t.png", width: 80%),
       caption: [Tableau for RK4],
     )
   ],
   [
-
-
+    #figure(
+      table(
+        columns: (auto, auto, auto),
+        [Order], [Stages], [Total coefficients],
+        [8], [13], [80],
+      ),
+      caption: [Dormand & Prince (1981)],
+    )
     - Fixed-step variant: adaptive control disabled, $h$ held constant.
-    - Coefficients loaded directly from `scipy.integrate.DOP853` — bit-for-bit reproducible
+    - Coefficients loaded directly from `scipy.integrate.DOP853`.
   ],
 )
 
-Global truncation error scales as $cal(O)(h^4)$ for RK4 and $cal(O)(h^8)$ for RK8 — for the same $h$, RK8 error is roughly $h^4$ times smaller, which for $h=0.01$ is a factor of $10^8$.
+#tblock(title: [Global truncation error])[
+  Scales as $cal(O)(h^4)$ for RK4 and $cal(O)(h^8)$ for RK8 — for the same $h$, RK8 error is roughly $h^4$ times smaller, which for $h=0.01$ is a factor of $10^8$.
+]
+
+== Energy Drift Comparison
+
+Energy as a way to compare
+
+Global error
+
+== Working example with RK4 and RK8
+
+#figure(
+  image("images/video.png", width: 70%),
+  caption: [Comparison of RK4 and RK8 solutions],
+)
 
 == Adaptive step-size control
 
-Adaptive step-size control.
+Error for a order method
+
+$ p -> u_(i+1) $
+
+$ p+1 -> tilde(u)_(i+1) $
+
+$ E_i(h) = \|u_i - tilde(u)_(i+1)\| $
+
+$E_i(h)<epsilon$
+
+$E_i(h)approx C h^(p+1)$
+
+$E_i(q h) approx q^(p+1) C h^(p+1) approx epsilon$
+
+$q approx (epsilon/E_i(h))^(1/(p+1))$
 
 == Embedding Runge Kutta
 
