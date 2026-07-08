@@ -302,9 +302,15 @@ class DoublePendulumSolver:
         default=Path(""),
         metadata={"description": "Path to save the simulation results as a plot"},
     )
-    method: Literal["rk4", "rk8", "rk4_adaptive"] = field(
+    method: Literal[
+        "rk4", "rk8", "rk4_adaptive", "rk45_adaptive", "dop853_adaptive"
+    ] = field(
         default="rk4",
         metadata={"description": "Solver method to use"},
+    )
+    path_steps: Path = field(
+        default=Path(""),
+        metadata={"description": "Path to save adaptive step data (t, u, h) as .npz"},
     )
     # — internal, set by solver methods —
     _feval_count: int | None = field(
@@ -318,6 +324,7 @@ class DoublePendulumSolver:
             self.set_preset(self.preset)
 
         os.makedirs(DOUBLE_PENDULUM_PATH / "plots", exist_ok=True)
+        os.makedirs(DOUBLE_PENDULUM_PATH / "data", exist_ok=True)
         self._build_paths()
         self.solve()
 
@@ -328,6 +335,7 @@ class DoublePendulumSolver:
         prefix = f"{self.time_str}_{self.h_str}_{pi_2}_{pi_6}_{self.omega_1}_{self.omega_2}_{self.method}"
         self.path_numpy = DOUBLE_PENDULUM_PATH / f"data/{prefix}.npy"
         self.path_animation = DOUBLE_PENDULUM_PATH / f"data/{prefix}.png"
+        self.path_steps = DOUBLE_PENDULUM_PATH / f"data/{prefix}_steps.npz"
 
     def solve(self, force=False):
         if self.preset:
@@ -342,6 +350,10 @@ class DoublePendulumSolver:
                 self.solve_rk8()
             elif self.method == "rk4_adaptive":
                 self.solve_adaptive_rk4()
+            elif self.method == "rk45_adaptive":
+                self.solve_rk45_adaptive()
+            elif self.method == "dop853_adaptive":
+                self.solve_dop853_adaptive()
             else:
                 raise ValueError(f"Unknown method: {self.method}")
         elif self.path_numpy.exists():
@@ -525,6 +537,147 @@ class DoublePendulumSolver:
             f"Adaptive RK4 completed: {accepted} accepted, {rejected} rejected "
             f"steps (target grid: {self.steps} points)"
         )
+
+    def solve_rk45_adaptive(
+        self,
+        rtol: float = 1e-6,
+        atol: float = 1e-8,
+        h_min: float = 1e-12,
+    ):
+        """
+        Adaptive RK45 (RKF45) that records the raw adaptive step sizes.
+
+        Saves:
+        - path_numpy : interpolated uniform solution (N_steps+1, 4) for
+                       compatibility with the rest of the class.
+        - path_steps : .npz with keys
+            t  (N,)   – time at each accepted step
+            u  (N, 4) – state at each accepted step
+            h  (N-1,) – step size used for each accepted step
+        """
+        u_0 = self.build_initial_conditions()
+        tf = self.time
+        h_max = tf / 10.0
+        h = min(self.h, h_max)
+        t = 0.0
+        u_curr = u_0.copy()
+
+        times = [t]
+        states = [u_curr.copy()]
+        step_sizes = []  # h used for each accepted step
+
+        safety = 0.9
+        max_factor = 5.0
+        min_factor = 0.1
+        accepted = rejected = 0
+
+        while t < tf:
+            if t + h > tf:
+                h = tf - t
+
+            u_next, error = adaptive_rk4_step(F, t, u_curr, h)
+            scale = atol + rtol * np.maximum(np.abs(u_curr), np.abs(u_next))
+            err_ratio = np.max(error / scale)
+
+            if err_ratio <= 1.0:
+                # accept
+                step_sizes.append(h)
+                t += h
+                u_curr = u_next.copy()
+                times.append(t)
+                states.append(u_curr.copy())
+                accepted += 1
+                factor = (
+                    safety * err_ratio ** (-1 / 5) if err_ratio > 1e-15 else max_factor
+                )
+                h = min(max(min_factor, factor) * h, h_max)
+            else:
+                # reject
+                rejected += 1
+                factor = (
+                    safety * err_ratio ** (-1 / 4) if err_ratio > 1e-15 else min_factor
+                )
+                h = max(min_factor, factor) * h
+                if h < h_min:
+                    # force-accept to avoid infinite loop
+                    step_sizes.append(h)
+                    t += h
+                    u_curr = u_next.copy()
+                    times.append(t)
+                    states.append(u_curr.copy())
+                    accepted += 1
+                    h = h_min
+
+        t_arr = np.array(times)
+        u_arr = np.array(states)
+        h_arr = np.diff(t_arr)  # shape (N-1,)
+
+        # Save raw adaptive step data
+        np.savez(self.path_steps, t=t_arr, u=u_arr, h=h_arr)
+        print(f"Saved step data to {self.path_steps}")
+
+        # Interpolate onto uniform grid for compatibility
+        t_eval = np.linspace(0.0, tf, self.steps + 1)
+        u_uniform = np.zeros((self.steps + 1, 4))
+        for i in range(4):
+            u_uniform[:, i] = np.interp(t_eval, t_arr, u_arr[:, i])
+        u_uniform[0] = u_0
+
+        self._feval_count = 6 * (accepted + rejected)
+        self.save_solution(u_uniform)
+        print(f"RK45 adaptive: {accepted} accepted, {rejected} rejected steps")
+
+    def solve_dop853_adaptive(
+        self,
+        rtol: float = 1e-6,
+        atol: float = 1e-8,
+    ):
+        """
+        Adaptive DOP853 via scipy — step sizes chosen by the solver.
+
+        Calling solve_ivp WITHOUT t_eval returns the solution at the
+        solver's internal step points, giving us the true adaptive steps.
+
+        Saves:
+        - path_numpy : interpolated uniform solution (N_steps+1, 4).
+        - path_steps : .npz with keys
+            t  (N,)   – time at each internal step
+            u  (N, 4) – state at each internal step
+            h  (N-1,) – step sizes (diff of t)
+        """
+        from scipy.integrate import solve_ivp
+
+        u_0 = self.build_initial_conditions()
+        tf = self.time
+
+        sol = solve_ivp(
+            rhs,
+            (0.0, tf),
+            u_0,
+            method="DOP853",
+            rtol=rtol,
+            atol=atol,
+            dense_output=False,  # no t_eval → raw internal steps only
+        )
+
+        t_arr = sol.t  # (N,)
+        u_arr = sol.y.T  # (N, 4)
+        h_arr = np.diff(t_arr)  # (N-1,)
+
+        # Save raw adaptive step data
+        np.savez(self.path_steps, t=t_arr, u=u_arr, h=h_arr)
+        print(f"Saved step data to {self.path_steps}")
+
+        # Interpolate onto uniform grid for compatibility
+        t_eval = np.linspace(0.0, tf, self.steps + 1)
+        u_uniform = np.zeros((self.steps + 1, 4))
+        for i in range(4):
+            u_uniform[:, i] = np.interp(t_eval, t_arr, u_arr[:, i])
+        u_uniform[0] = u_0
+
+        self._feval_count = None  # scipy internal, not tracked
+        self.save_solution(u_uniform)
+        print(f"DOP853 adaptive: {len(t_arr)} steps")
 
     def get_energy(self, u: np.ndarray) -> np.ndarray:
         # u = [theta_1, omega_1, theta_2, omega_2]

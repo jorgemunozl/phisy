@@ -9,6 +9,7 @@ wheels/
 src/curricular/mathematics_methods_lab_03/images/
 
 *.npy
+*.npz
 *.svg
 
 *.webp

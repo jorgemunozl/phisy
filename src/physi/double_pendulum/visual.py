@@ -55,9 +55,17 @@ RK8_PATH = Path(__file__).parent / "data" / "50s_10e3_pi_2_pi_6_1.0_0.0_rk8.npy"
 
 RK4_ADAPTIVE_PATH = RK4_PATH
 
+# ── Adaptive step-size paths (hard preset, 50 s) ──────────────────────
+DATA = Path(__file__).parent / "data"
+RK45_ADAPTIVE_PATH = DATA / "50s_10e3_pi_2_pi_6_1.0_0.0_rk45_adaptive.npy"
+RK45_STEPS_PATH = DATA / "50s_10e3_pi_2_pi_6_1.0_0.0_rk45_adaptive_steps.npz"
+DOP853_ADAPTIVE_PATH = DATA / "50s_10e3_pi_2_pi_6_1.0_0.0_dop853_adaptive.npy"
+DOP853_STEPS_PATH = DATA / "50s_10e3_pi_2_pi_6_1.0_0.0_dop853_adaptive_steps.npz"
+
 RENDER_FPS = 60  # must match config.quality below (ql→15, qm→30, qh/qk→60)
 SUBSAMPLING = 1  # extra trail thinning (1 = every rendered step)
-SIM_TIME = 50.0  # total simulation time — controls both x-axis and video duration
+SIM_TIME = 50.0  # total duration of the saved simulation data (seconds)
+ANIM_DURATION = 15.0  # seconds of simulation to show — also sets video length
 
 E_MARGIN_rk4 = 1e-8  # For rk4
 E_MARGIN_rk8 = 1e-12  # For rk8
@@ -130,10 +138,17 @@ def build_pendulum_objects(
     return pts_p1, pts_p2, pivot, rod1, rod2, mass1, mass2, trail
 
 
-def compute_stride(num_frames):
-    """Return (indices, time_per_step) for frame-by-frame playback."""
+def compute_stride(num_frames, duration=None):
+    """Return (indices, time_per_step) for frame-by-frame playback.
+
+    ``duration`` is the simulation time covered by ``num_frames``.
+    Defaults to ANIM_DURATION so scenes that slice their data already
+    get the right timing without having to pass anything extra.
+    """
+    if duration is None:
+        duration = ANIM_DURATION
     min_wait = 1.0 / RENDER_FPS
-    ideal_wait = SIM_TIME / max(num_frames - 1, 1)
+    ideal_wait = duration / max(num_frames - 1, 1)
     stride = max(1, int(np.ceil(min_wait / ideal_wait)))
     indices = range(0, num_frames, stride)
     return indices, stride * ideal_wait
@@ -377,7 +392,222 @@ class DoublePendulumEnergy(Scene):
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  Scene 2 — RK4 vs RK8 side by side
+#  Scene 2 — RK45 vs DOP853: live step-size h(t) plot
+# ══════════════════════════════════════════════════════════════════════
+
+
+class DoublePendulumStepSize(Scene):
+    """
+    Left  → RK45 (blue) and DOP853 (red) pendulums overlaid.
+    Top right    → live h(t) plot for RK45.
+    Bottom right → live h(t) plot for DOP853.
+    """
+
+    def construct(self):
+        # ── Load data ──────────────────────────────────────────────────
+        traj_rk45 = np.load(RK45_ADAPTIVE_PATH)  # uniform grid (N, 4)
+        traj_dop853 = np.load(DOP853_ADAPTIVE_PATH)  # uniform grid (N, 4)
+
+        steps_rk45 = np.load(RK45_STEPS_PATH)
+        steps_dop853 = np.load(DOP853_STEPS_PATH)
+
+        t45 = steps_rk45["t"]  # (N45,)
+        h45 = steps_rk45["h"]  # (N45-1,)  step sizes
+        t853 = steps_dop853["t"]  # (N853,)
+        h853 = steps_dop853["h"]  # (N853-1,)
+
+        total_frames = min(len(traj_rk45), len(traj_dop853))
+
+        # Slice to ANIM_DURATION seconds so the video runs at 1:1 simulation speed
+        n_use = max(2, int(ANIM_DURATION / SIM_TIME * total_frames))
+        traj_rk45 = traj_rk45[:n_use]
+        traj_dop853 = traj_dop853[:n_use]
+        num_frames = n_use
+        t_uniform = np.linspace(0, ANIM_DURATION, num_frames)
+
+        # Slice step data to the same window
+        mask45 = t45 <= ANIM_DURATION
+        mask853 = t853 <= ANIM_DURATION
+        t45 = t45[mask45]
+        t853 = t853[mask853]
+        h45 = np.diff(t45)  # recompute after slicing
+        h853 = np.diff(t853)
+
+        # ── Pendulums (left half) ──────────────────────────────────────
+        _, _, x2_45, y2_45 = cartesian_from_traj(traj_rk45)
+        _, _, x2_853, y2_853 = cartesian_from_traj(traj_dop853)
+        scale = compute_scale(
+            np.concatenate([x2_45, x2_853]),
+            np.concatenate([y2_45, y2_853]),
+            screen_half_width=3.0,
+        )
+        offset = np.array([-3.5, 0.0, 0.0])
+
+        pts45_p1, pts45_p2, piv45, r45_1, r45_2, m45_1, m45_2, t4 = (
+            build_pendulum_objects(
+                traj_rk45,
+                offset,
+                rod1_color=BLUE,
+                rod2_color=BLUE,
+                mass1_color=BLUE,
+                mass2_color=BLUE,
+                trail_color=BLUE,
+                scale=scale,
+            )
+        )
+        pts853_p1, pts853_p2, piv853, r853_1, r853_2, m853_1, m853_2, t8 = (
+            build_pendulum_objects(
+                traj_dop853,
+                offset,
+                rod1_color=RED,
+                rod2_color=RED,
+                mass1_color=RED,
+                mass2_color=RED,
+                trail_color=RED,
+                scale=scale,
+            )
+        )
+        for obj in (r853_1, r853_2, m853_1, m853_2):
+            obj.set_opacity(0.7)
+
+        legend = VGroup(
+            Dot(radius=0.08, color=BLUE).move_to(np.array([-6.5, 3.5, 0.0])),
+            Text("RK45", font_size=18, color=BLUE).next_to(
+                np.array([-6.5, 3.5, 0.0]), RIGHT, buff=0.15
+            ),
+            Dot(radius=0.08, color=RED).move_to(np.array([-6.5, 3.1, 0.0])),
+            Text("DOP853", font_size=18, color=RED).next_to(
+                np.array([-6.5, 3.1, 0.0]), RIGHT, buff=0.15
+            ),
+        )
+
+        # ── Step-size axes (right half) ────────────────────────────────
+        AX_W, AX_H = 3.8, 1.8
+
+        def make_h_axes(max_h, center_y, color):
+            y_top = float(max_h) * 1.3
+            y_step = y_top / 4
+            ax = Axes(
+                x_range=[0, ANIM_DURATION, ANIM_DURATION / 4],
+                y_range=[0, y_top, y_step],
+                x_length=AX_W,
+                y_length=AX_H,
+                axis_config={"color": WHITE, "font_size": 14},
+                tips=False,
+            )
+            ax.move_to(np.array([3.0, center_y, 0.0]))
+            return ax
+
+        ax_rk45 = make_h_axes(h45.max(), 2.0, BLUE)
+        ax_dop853 = make_h_axes(h853.max(), -2.0, RED)
+
+        rk45_title = Text("RK45 — step size h(t)", font_size=18, color=BLUE)
+        rk45_title.next_to(ax_rk45, UP, buff=0.12)
+        dop853_title = Text("DOP853 — step size h(t)", font_size=18, color=RED)
+        dop853_title.next_to(ax_dop853, UP, buff=0.12)
+
+        t_lbl = Text("t (s)", font_size=16, color=WHITE)
+        t_lbl_45 = t_lbl.copy().next_to(ax_rk45, DOWN, buff=0.15)
+        t_lbl_853 = t_lbl.copy().next_to(ax_dop853, DOWN, buff=0.15)
+
+        # ── Growing line graphs ────────────────────────────────────────
+        # Each step point: (t45[i+1], h45[i]) — time AFTER the step, size used.
+        graph_rk45 = VMobject(color=BLUE, stroke_width=2)
+        graph_rk45.start_new_path(ax_rk45.coords_to_point(t45[1], h45[0]))
+
+        graph_dop853 = VMobject(color=RED, stroke_width=2)
+        graph_dop853.start_new_path(ax_dop853.coords_to_point(t853[1], h853[0]))
+
+        dot_rk45 = Dot(ax_rk45.coords_to_point(t45[1], h45[0]), color=BLUE, radius=0.06)
+        dot_dop853 = Dot(
+            ax_dop853.coords_to_point(t853[1], h853[0]), color=RED, radius=0.06
+        )
+
+        divider = Line(
+            np.array([-0.6, -4.2, 0.0]),
+            np.array([-0.6, 4.2, 0.0]),
+            color=WHITE,
+            stroke_width=1.0,
+            stroke_opacity=0.35,
+        )
+
+        # ── Add everything to scene ────────────────────────────────────
+        self.add(
+            piv45,
+            t4,
+            t8,
+            r45_1,
+            r45_2,
+            m45_1,
+            m45_2,
+            r853_1,
+            r853_2,
+            m853_1,
+            m853_2,
+            legend,
+            divider,
+            ax_rk45,
+            ax_dop853,
+            rk45_title,
+            dop853_title,
+            t_lbl_45,
+            t_lbl_853,
+            graph_rk45,
+            graph_dop853,
+            dot_rk45,
+            dot_dop853,
+        )
+        self.wait(0.3)
+
+        # ── Animation loop ─────────────────────────────────────────────
+        indices, t_step = compute_stride(num_frames)
+        ptr45 = 0  # next index into h45 to reveal
+        ptr853 = 0  # next index into h853 to reveal
+
+        for i in indices:
+            t_curr = t_uniform[i]
+
+            # --- Pendulums ---
+            p45_1, p45_2 = pts45_p1[i], pts45_p2[i]
+            p853_1, p853_2 = pts853_p1[i], pts853_p2[i]
+
+            m45_1.move_to(p45_1)
+            m45_2.move_to(p45_2)
+            r45_1.become(Line(piv45.get_center(), p45_1, color=BLUE, stroke_width=6))
+            r45_2.become(Line(p45_1, p45_2, color=BLUE, stroke_width=5))
+
+            m853_1.move_to(p853_1)
+            m853_2.move_to(p853_2)
+            r853_1.become(Line(piv45.get_center(), p853_1, color=RED, stroke_width=6))
+            r853_2.become(Line(p853_1, p853_2, color=RED, stroke_width=5))
+
+            # --- Trails ---
+            stride_a = int(np.ceil(t_step * RENDER_FPS))
+            if i % (stride_a * SUBSAMPLING) == 0:
+                add_trail_dot(t4, p45_2, i, num_frames, BLUE, stride_a)
+                add_trail_dot(t8, p853_2, i, num_frames, RED, stride_a)
+
+            # --- RK45 h(t) graph: reveal all steps up to t_curr ---
+            while ptr45 < len(h45) and t45[ptr45 + 1] <= t_curr:
+                pt = ax_rk45.coords_to_point(t45[ptr45 + 1], h45[ptr45])
+                graph_rk45.add_line_to(pt)
+                dot_rk45.move_to(pt)
+                ptr45 += 1
+
+            # --- DOP853 h(t) graph ---
+            while ptr853 < len(h853) and t853[ptr853 + 1] <= t_curr:
+                pt = ax_dop853.coords_to_point(t853[ptr853 + 1], h853[ptr853])
+                graph_dop853.add_line_to(pt)
+                dot_dop853.move_to(pt)
+                ptr853 += 1
+
+            self.wait(t_step)
+
+        self.wait(0.01)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Scene 3 — RK4 vs RK8 side by side
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -828,7 +1058,8 @@ if __name__ == "__main__":
     # SCENE = "DoublePendulumThreeWay"
     # SCENE = "DoublePendulumOverlay"
     # SCENE = "DoublePendulumSideBySide"
-    SCENE = "DoublePendulumEnergy"
+    # SCENE = "DoublePendulumEnergy"
+    SCENE = "DoublePendulumStepSize"
     # ──────────────────────────────────────────────────────────────────
 
     config.progress_bar = "display"
@@ -838,6 +1069,7 @@ if __name__ == "__main__":
 
     scene_class = {
         "DoublePendulumEnergy": DoublePendulumEnergy,
+        "DoublePendulumStepSize": DoublePendulumStepSize,
         "DoublePendulumSideBySide": DoublePendulumSideBySide,
         "DoublePendulumOverlay": DoublePendulumOverlay,
         "DoublePendulumThreeWay": DoublePendulumThreeWay,
