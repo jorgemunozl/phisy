@@ -6,6 +6,8 @@ dist/
 wheels/
 *.egg-info
 
+/src/physi/media
+
 src/curricular/mathematics_methods_lab_03/images/
 
 *.npy
