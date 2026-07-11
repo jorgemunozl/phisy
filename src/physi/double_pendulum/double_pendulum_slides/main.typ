@@ -36,11 +36,11 @@
     With the position of each mass you can calculate the lagragian
     $
       x_1 = L_1 sin theta_1 and y_1 = - L_1 cos theta_1 \
-      x_2 = L_1 sin theta_1 + L_2 sin theta_2 and y_2 = - L_1 cos theta_1 - L_2 cos theta_2
+      x_2 = x_1 + L_2 sin theta_2 and y_2 = y_1 - L_2 cos theta_2
     $
+    The phase space is four dimensional $(theta_1, theta_2, dot(theta)_1, dot(theta)_2)$
     $ cal(L) = T - U $
-    Using the Euler Lagrange equations you obtain:
-
+    Using the _Euler Lagrange_ equations you obtain:
     $
       dot.double(theta)_1 = f_1(theta_1, theta_2, dot(theta)_1, dot(theta)_2) \
       dot.double(theta)_2 = f_2(theta_1, theta_2, dot(theta)_1, dot(theta)_2)
@@ -48,13 +48,13 @@
   ],
   [
     #figure(
-      image("images/dp.webp"),
-      caption: [Double Pendulum],
+      image("images/dp.webp", width: 120%),
+      caption: [Double Pendulum formulation],
     )
   ],
 )
 
-== Motivatig Kutta
+== Motivating Kutta
 
 Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
 
@@ -107,6 +107,21 @@ _How do you obtain coefficients $(a_(i j) , b_i, c_i)$?_
     )
   ],
 )
+
+== Runge Kutta for the Double Pendulum
+
+#let bf(x) = math.bold(math.upright(x))
+
+We have second derivatives; use vectors instead of scalars.
+
+$ bf(u)=(theta_1, dot(theta_1), theta_2, dot(theta_2)) $
+
+$ dot(bf(u))=(dot(theta_1), dot.double(theta_1), dot(theta_2), dot.double(theta_2)) $
+
+The update would be:
+
+$ bf(u_(n+1)) = bf(u_n) + h sum_i b_i bf(k_i) $
+
 == Working example with  RK4 and RK8
 
 #grid(

@@ -68,7 +68,7 @@ DOP853_LOOSE_STEPS = DATA / "50s_10e3_pi_2_pi_6_1.0_0.0_dop853_loose_steps.npz"
 RENDER_FPS = 60  # must match config.quality below (ql→15, qm→30, qh/qk→60)
 SUBSAMPLING = 1  # extra trail thinning (1 = every rendered step)
 SIM_TIME = 50.0  # total duration of the saved simulation data (seconds)
-ANIM_DURATION = 50.0  # seconds of simulation to show — also sets video length
+ANIM_DURATION = 20  # seconds of simulation to show — also sets video length
 
 E_MARGIN_rk4 = 1e-8  # For rk4
 E_MARGIN_rk8 = 1e-12  # For rk8
@@ -616,12 +616,15 @@ class DoublePendulumStepSize(Scene):
 
 class DoublePendulumRawSteps(Scene):
     """
-    Like DoublePendulumStepSize but the pendulum uses the raw adaptive
-    outputs directly — no uniform-grid interpolation.
-    The pendulum only moves when the solver actually took a step.
-    DOP853 visibly freezes between its big steps; RK45 moves frequently
-    with small nudges.
+    Raw adaptive steps — the pendulum jumps at solver step points.
+
+    * Slow-motion playback (SLOW_MO) so the viewer can follow the dynamics.
+    * Dynamic y-axis that zooms in/out following recent step-size variation.
     """
+
+    SLOW_MO = 5  # multiplier → slower playback
+    WINDOW_S = 5.0  # rolling look-back window (simulation seconds)
+    Y_MARGIN = 1.5  # y_max = max_recent_h * Y_MARGIN
 
     def construct(self):
         # ── Load raw step data ─────────────────────────────────────────
@@ -644,7 +647,9 @@ class DoublePendulumRawSteps(Scene):
         # Merged time sequence: every moment either solver stepped
         all_times = np.union1d(t45[1:], t853[1:])
         n_merged = len(all_times)
-        wait_time = max(1.0 / RENDER_FPS, ANIM_DURATION / max(n_merged, 1))
+        wait_time = (
+            max(1.0 / RENDER_FPS, ANIM_DURATION / max(n_merged, 1)) * self.SLOW_MO
+        )
 
         # ── Pendulums built from raw u ─────────────────────────────────
         _, _, x2_45, y2_45 = cartesian_from_traj(u45)
@@ -694,11 +699,11 @@ class DoublePendulumRawSteps(Scene):
             ),
         )
 
-        # ── Step-size axes ─────────────────────────────────────────────
+        # ── Step-size axes (right half) — starting with full range ─────
         AX_W, AX_H = 3.8, 1.8
 
-        def make_h_axes(max_h, center_y):
-            y_top = float(max_h) * 1.3
+        def build_axes(ymax, center_y):
+            y_top = float(max(ymax, 1e-12)) * self.Y_MARGIN
             y_step = y_top / 4
             return Axes(
                 x_range=[0, ANIM_DURATION, ANIM_DURATION / 4],
@@ -709,12 +714,9 @@ class DoublePendulumRawSteps(Scene):
                 tips=False,
             ).move_to(np.array([3.0, center_y, 0.0]))
 
-        ax_rk45 = make_h_axes(h45.max(), 2.0)
-        ax_dop853 = make_h_axes(h853.max(), -2.0)
+        ax_rk45 = build_axes(h45.max(), 2.0)
+        ax_dop853 = build_axes(h853.max(), -2.0)
 
-        Text("RK45 — step size h(t)", font_size=18, color=BLUE).next_to(
-            ax_rk45, UP, buff=0.12
-        )
         rk45_title = Text("RK45 — h(t) [raw]", font_size=18, color=BLUE).next_to(
             ax_rk45, UP, buff=0.12
         )
@@ -770,13 +772,75 @@ class DoublePendulumRawSteps(Scene):
         )
         self.wait(0.3)
 
+        # ── Helper to rebuild a graph on new axes ──────────────────────
+        def rebuild_graph_on(ax, pts_t, pts_h, color):
+            if len(pts_t) == 0:
+                g = VMobject(color=color, stroke_width=2)
+                return g
+            g = VMobject(color=color, stroke_width=2)
+            g.start_new_path(ax.coords_to_point(pts_t[0], pts_h[0]))
+            for j in range(1, len(pts_t)):
+                g.add_line_to(ax.coords_to_point(pts_t[j], pts_h[j]))
+            return g
+
+        def maybe_update_axes(
+            ax,
+            title_obj,
+            t_curr,
+            color,
+            center_y,
+            revealed_t,
+            revealed_h,
+            graph_obj,
+            dot_obj,
+        ):
+            """Rebuild axes + graph if the recent y-range drifts far."""
+            if len(revealed_t) < 2:
+                return ax, graph_obj, dot_obj
+
+            # Max h in the look-back window
+            in_window = np.where(
+                (revealed_t >= t_curr - self.WINDOW_S) & (revealed_t <= t_curr)
+            )[0]
+            if len(in_window) == 0:
+                return ax, graph_obj, dot_obj
+
+            recent_max = float(revealed_h[in_window].max())
+            new_ymax = recent_max * self.Y_MARGIN
+
+            # Only update if the new y-range differs by > 25 %
+            _, old_ymax, _ = ax.y_range
+            old_ymax = float(old_ymax)
+            if abs(new_ymax / max(old_ymax, 1e-15) - 1.0) < 0.25:
+                return ax, graph_obj, dot_obj
+
+            # Build new axes
+            new_ax = build_axes(recent_max, center_y)
+            new_graph = rebuild_graph_on(new_ax, revealed_t, revealed_h, color)
+            new_dot = Dot(
+                new_ax.coords_to_point(revealed_t[-1], revealed_h[-1]),
+                color=color,
+                radius=0.06,
+            )
+
+            # Replace in scene
+            self.remove(ax, graph_obj, dot_obj)
+            self.add(new_ax, new_graph, new_dot)
+            # Reposition title
+            title_obj.next_to(new_ax, UP, buff=0.12)
+            return new_ax, new_graph, new_dot
+
         # ── Animation loop — driven by merged step times ─────────────────
-        # Pointers into raw step arrays
         ptr45 = 0
         ptr853 = 0
         hptr45 = 0
         hptr853 = 0
+        rev45_t = []
+        rev45_h = []  # revealed points for RK45
+        rev853_t = []
+        rev853_h = []  # revealed points for DOP853
         trail_every = max(1, n_merged // 200)
+        UPDATE_EVERY = max(1, n_merged // 30)  # check axes ~30 times
 
         for idx, t_curr in enumerate(all_times):
             # Advance each solver to the most recent step ≤ t_curr
@@ -806,16 +870,49 @@ class DoublePendulumRawSteps(Scene):
 
             # h(t) plots: reveal steps up to t_curr
             while hptr45 < len(h45) and t45[hptr45 + 1] <= t_curr:
+                rev45_t.append(t45[hptr45 + 1])
+                rev45_h.append(h45[hptr45])
                 pt = ax_rk45.coords_to_point(t45[hptr45 + 1], h45[hptr45])
                 graph_rk45.add_line_to(pt)
                 dot_rk45.move_to(pt)
                 hptr45 += 1
 
             while hptr853 < len(h853) and t853[hptr853 + 1] <= t_curr:
+                rev853_t.append(t853[hptr853 + 1])
+                rev853_h.append(h853[hptr853])
                 pt = ax_dop853.coords_to_point(t853[hptr853 + 1], h853[hptr853])
                 graph_dop853.add_line_to(pt)
                 dot_dop853.move_to(pt)
                 hptr853 += 1
+
+            # Dynamic y-axis zoom — checked periodically
+            if idx % UPDATE_EVERY == 0:
+                ra = np.array(rev45_t)
+                rh = np.array(rev45_h)
+                ax_rk45, graph_rk45, dot_rk45 = maybe_update_axes(
+                    ax_rk45,
+                    rk45_title,
+                    t_curr,
+                    BLUE,
+                    2.0,
+                    ra,
+                    rh,
+                    graph_rk45,
+                    dot_rk45,
+                )
+                ra = np.array(rev853_t)
+                rh = np.array(rev853_h)
+                ax_dop853, graph_dop853, dot_dop853 = maybe_update_axes(
+                    ax_dop853,
+                    dop853_title,
+                    t_curr,
+                    RED,
+                    -2.0,
+                    ra,
+                    rh,
+                    graph_dop853,
+                    dot_dop853,
+                )
 
             self.wait(wait_time)
 
@@ -1418,8 +1515,10 @@ if __name__ == "__main__":
 
     config.progress_bar = "display"
     config.quality = "high_quality"  # -qh  (60 fps)
+    # config.quality = "low_quality"  # -qm  (30 fps)
     config.preview = True
     config.disable_caching = False
+    config.custom_folders = "media/"
 
     scene_class = {
         "DoublePendulumEnergy": DoublePendulumEnergy,
