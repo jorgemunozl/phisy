@@ -1,4 +1,5 @@
-#import "@preview/cetz:0.4.2"
+#import "@preview/cetz:0.5.2"
+#import "@preview/cetz-plot:0.1.4": plot
 #import "@preview/fontawesome:0.5.0": *
 #import "@preview/fletcher:0.5.8" as fletcher: edge, node
 #import "@preview/touying:0.6.1": *
@@ -160,48 +161,60 @@ $ bf(u_(n+1)) = bf(u_n) + h sum_i b_i bf(k_i) $
     The Hamiltonian $H$ is conserved exactly — any drift is *pure numerical error* accumulating over time.
     $ Delta H(t) = H(t) - H(0) $
 
-    #cetz-canvas({
-      import cetz.draw: *
+    #figure(
+      cetz-canvas({
+        import cetz.draw: *
 
-      // Axes
-      let W = 5.5
-      let H = 3.2
-      line((0, 0), (W, 0), mark: (end: ">"), name: "xax")
-      line((0, 0), (0, H), mark: (end: ">"), name: "yax")
-      content((W + 0.3, 0), $t$)
-      content((0.05, H + 0.25), $Delta H$)
-      content((0, -0.25), $0$)
+        let W = 5.5
+        let H = 3.2
 
-      // Euler — blows up (steep exponential-like)
-      bezier(
-        (0, 0.05),
-        (W * 0.55, H * 0.95),
-        (W * 0.15, 0.15),
-        (W * 0.4, H * 0.7),
-        stroke: (paint: red, thickness: 1.5pt),
-      )
-      content((W * 0.57, H * 0.95 + 0.22), text(fill: red, size: 8pt)[Euler])
+        // Grid
+        for i in range(1, 5) {
+          line((i * W / 4, 0), (i * W / 4, H), stroke: (paint: luma(220), thickness: 0.3pt))
+        }
+        for i in range(1, 3) {
+          line((0, i * H / 3), (W, i * H / 3), stroke: (paint: luma(220), thickness: 0.3pt))
+        }
 
-      // RK4 — gentle polynomial drift
-      bezier(
-        (0, 0.02),
-        (W * 0.92, H * 0.48),
-        (W * 0.35, 0.08),
-        (W * 0.7, H * 0.3),
-        stroke: (paint: blue, thickness: 1.5pt),
-      )
-      content((W * 0.94, H * 0.48 + 0.22), text(fill: blue, size: 8pt)[RK4])
+        // Axes
+        line((0, 0), (W, 0), mark: (end: ">"))
+        line((0, 0), (0, H), mark: (end: ">"))
+        content((W + 0.3, 0), text(fill: black, size: 10pt)[$t$])
+        content((0.05, H + 0.25), text(fill: black, size: 10pt)[$Delta H$])
+        content((0, -0.25), $0$)
 
-      // RK8 — near flat
-      bezier(
-        (0, 0.01),
-        (W * 0.92, H * 0.06),
-        (W * 0.4, 0.02),
-        (W * 0.7, 0.055),
-        stroke: (paint: green, thickness: 1.5pt),
-      )
-      content((W * 0.94, H * 0.06 + 0.22), text(fill: green, size: 8pt)[RK8])
-    })
+        // Euler — exponential blow-up
+        bezier(
+          (0, 0.05),
+          (2, 2),
+          (0, 2.2),
+          (2, 0),
+          stroke: (paint: red, thickness: 1.5pt),
+        )
+        content((W * 0.54, H * 0.95 + 0.22), text(fill: red, size: 8pt)[Euler])
+
+        // RK4 — gentle polynomial drift
+        bezier(
+          (0, 0.02),
+          (W * 0.92, H * 0.48),
+          (W * 0.35, 0.08),
+          (W * 0.7, H * 0.3),
+          stroke: (paint: blue, thickness: 1.5pt),
+        )
+        content((W * 0.94, H * 0.48 + 0.22), text(fill: blue, size: 12pt)[RK4])
+
+        // RK8 — near flat
+        bezier(
+          (0, 0.01),
+          (W * 0.92, H * 0.06),
+          (W * 0.4, 0.02),
+          (W * 0.7, 0.055),
+          stroke: (paint: green, thickness: 1.5pt),
+        )
+        content((W * 0.94, H * 0.06 + 0.22), text(fill: green, size: 12pt)[RK8])
+      }),
+      caption: [Energy drift over time for different integrators],
+    )
   ],
   [
     #figure(
