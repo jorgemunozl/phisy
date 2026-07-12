@@ -68,7 +68,7 @@ DOP853_LOOSE_STEPS = DATA / "50s_10e3_pi_2_pi_6_1.0_0.0_dop853_loose_steps.npz"
 RENDER_FPS = 60  # must match config.quality below (ql→15, qm→30, qh/qk→60)
 SUBSAMPLING = 1  # extra trail thinning (1 = every rendered step)
 SIM_TIME = 50.0  # total duration of the saved simulation data (seconds)
-ANIM_DURATION = 20  # seconds of simulation to show — also sets video length
+ANIM_DURATION = 9.5  # seconds of simulation to show — also sets video length
 
 E_MARGIN_rk4 = 1e-8  # For rk4
 E_MARGIN_rk8 = 1e-12  # For rk8

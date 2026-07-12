@@ -250,7 +250,7 @@ class DoublePendulumSolver:
         default=10.0,
         metadata={"description": "Total simulation time in seconds"},
     )
-    preset: Literal["testing", "hard", "extreme"] = field(
+    preset: Literal["testing", "hard", "extreme", ""] = field(
         default="hard",
         metadata={"description": "Preset to use for simulation"},
     )
@@ -740,7 +740,7 @@ class DoublePendulumSolver:
         """
         t = np.linspace(0, self.time, self.steps)
         u = np.load(self.path_numpy)
-        e_self = self.get_energy(u)
+        e_self = self.get_energy(u) - self.get_energy(u)[0]
         if scale == "log":
             print(f"Using log scale for {self.method}")
             plt.plot(t, np.log(e_self), label=f"{self.method}, {self.h} log")
@@ -765,19 +765,45 @@ class DoublePendulumSolver:
         plt.savefig(path_save)
         print(f"Saved energy plot to {path_save}")
 
-    def plot_delta_e_vs_h(self, h_num, h_list=None):
-        # Total time fixed, h_variable then num_h steps variable
+    @staticmethod
+    def _clean_h(h: float) -> str:
+        """Format step size for filenames (e.g. 0.001, not 0.0010000000000002)."""
+        return f"{h:.10f}".rstrip("0").rstrip(".")
+
+    def plot_delta_e_vs_h(self, h_num=None, h_list=None):
+        """
+        Convergence plot: |ΔE| vs step size h on a log-log scale.
+
+        For each step size in *h_list*, the solver is run (or loaded from
+        disk) and the absolute energy drift  |E(t_f) - E(0)|  is computed.
+        The results are plotted on log-log axes together with a reference
+        line proportional to  h⁸  so the asymptotic 8th-order convergence
+        of the DOP853 method can be verified visually.
+
+        Numerical slopes between consecutive data points are annotated
+        so you can see where the method follows theory and where the
+        double-precision round-off floor flattens the curve.
+
+        Parameters
+        ----------
+        h_num : iterable
+            Exponents fed to  ``h_list = [0.1**i for i in h_num]`` when
+            *h_list* is not given explicitly.  For example
+            ``h_num=range(2, 6)``  →  [0.01, 0.001, 0.0001, 0.00001].
+        h_list : list of float, optional
+            Explicit list of step sizes to test.
+        """
         if h_list is None:
+            if h_num is None:
+                raise ValueError("Either h_num or h_list must be provided.")
             h_list = [(0.1) ** i for i in h_num]
 
+        h_used = []
+        delta_E = []  # |E_final - E_initial|
+
+        print(f"Computing ΔE for {len(h_list)} step sizes …")
         for h_step in h_list:
-
-            def clean_string(h: float | str) -> str:
-                return f"{h:.10f}".rstrip("0").rstrip(".")
-
-            # Clean h string for filenames (e.g. 0.001, not 0.0010000000000002)
-            h_fmt = clean_string(h_step)
-            # Bypass presets so h=h_step isn't overwritten by set_preset()
+            h_fmt = self._clean_h(h_step)
             solver_h = DoublePendulumSolver(
                 method=self.method,
                 time=self.time,
@@ -791,25 +817,95 @@ class DoublePendulumSolver:
                 h_str=h_fmt,
                 preset="",
             )
-            # __post_init__ already solved; just load the result
-            vector_state_h = np.load(solver_h.path_numpy)
-            energy_h = self.get_energy(vector_state_h)
-            t = np.linspace(0, self.time, len(energy_h))
-            plt.plot(t, energy_h, label=f"h={h_step}")
+            u = np.load(solver_h.path_numpy)
+            E = self.get_energy(u)
+            dE = abs(E[-1] - E[0])
+            h_used.append(h_step)
+            delta_E.append(dE)
+            print(f"  h = {h_step:.1e}  →  |ΔE| = {dE:.3e}")
 
-        if h_list is not None:
-            prefix = "_".join(clean_string(h) for h in h_list)
+        h_arr = np.array(h_used)
+        dE_arr = np.array(delta_E)
 
-        else:
-            prefix = clean_string(str(h_num))
-        plt.xlabel("Time")
-        plt.ylabel("Energy")
-        plt.legend()
-        path = f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{prefix}_delta_e_vs_h.png"
-        print(f"Saved delta energy plot to {path}")
-        plt.savefig(path)
+        # ── Plot ──────────────────────────────────────────────────────
+        fig, ax = plt.subplots(figsize=(8, 6))
 
-    def compare_solutions(self, method: Literal["rk4", "rk8"], preset: str):
+        # Data
+        ax.loglog(
+            h_arr,
+            dE_arr,
+            "o-",
+            ms=8,
+            lw=1.8,
+            color="steelblue",
+            label=f"{self.method}  |ΔE|",
+            zorder=5,
+        )
+
+        # h⁸ reference line — anchored at the largest-h point where the
+        # asymptotic regime is most reliable
+        C_ref = dE_arr[0] / (h_arr[0] ** 8)
+        h_ref = np.logspace(
+            np.log10(h_arr.min() / 1.5), np.log10(h_arr.max() * 1.5), 200
+        )
+        ax.loglog(
+            h_ref,
+            C_ref * h_ref**8,
+            "k--",
+            lw=1.3,
+            alpha=0.7,
+            label=r"$\propto h^{8}$  (theory)",
+            zorder=3,
+        )
+
+        # ── Annotate numerical slopes between consecutive points ──────
+        for i in range(len(h_arr) - 1):
+            slope = (np.log10(dE_arr[i + 1]) - np.log10(dE_arr[i])) / (
+                np.log10(h_arr[i + 1]) - np.log10(h_arr[i])
+            )
+            mid_h = np.sqrt(h_arr[i] * h_arr[i + 1])
+            mid_dE = np.sqrt(dE_arr[i] * dE_arr[i + 1])
+            ax.annotate(
+                f"{slope:.1f}",
+                xy=(mid_h, mid_dE),
+                fontsize=7,
+                color="gray",
+                ha="center",
+                va="bottom",
+                bbox=dict(
+                    boxstyle="round,pad=0.15", facecolor="white", alpha=0.75, ec="none"
+                ),
+            )
+
+        ax.set_xlabel("Step size  h", fontsize=12)
+        ax.set_ylabel(r"$|\Delta E| = |E(t_f) - E(0)|$", fontsize=12)
+        ax.set_title(
+            f"{self.method}: energy-error convergence\n"
+            f"T = {self.time}s,  "
+            f"theta_1 = {self.theta_1_str},  "
+            f"theta_2 = {self.theta_2_str},  "
+            f"omega_1 = {self.omega_1},  "
+            f"omega_2 = {self.omega_2}",
+            fontsize=11,
+        )
+        ax.legend(fontsize=10)
+        ax.grid(True, which="major", alpha=0.4)
+        ax.grid(True, which="minor", alpha=0.15)
+        ax.invert_xaxis()  # smaller h (more accurate) → right
+
+        fig.tight_layout()
+
+        prefix = "_".join(self._clean_h(h) for h in h_list)
+        path = f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{prefix}_convergence.png"
+        fig.savefig(path, dpi=150)
+        print(f"Saved convergence plot → {path}")
+        plt.show()
+
+    def compare_solutions(
+        self,
+        method: Literal["rk4", "rk8"],
+        preset: Literal["testing", "hard", "extreme", ""],
+    ):
         solver_odd = DoublePendulumSolver(method=method, preset=preset)
         if not self.path_numpy.exists():
             self.solve()
