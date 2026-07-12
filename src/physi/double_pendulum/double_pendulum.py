@@ -153,18 +153,19 @@ _RK8_B = np.array(
 )
 
 
-def rk8_step(f, t, u, h):
+def rk8_step(f, t, u, h, A, B, C):
     """Fixed-step DOP853 (8th-order Runge-Kutta) — 12 stages."""
     n = len(u)
-    k = np.zeros((12, n))
+    dtype = u.dtype
+    k = np.zeros((12, n), dtype=dtype)
 
     k[0] = h * f(t, u, d2theta1, d2theta2)
 
     for i in range(1, 12):
-        u_i = u + np.dot(_RK8_A[i, :i], k[:i])
-        k[i] = h * f(t + _RK8_C[i] * h, u_i, d2theta1, d2theta2)
+        u_i = u + np.dot(A[i, :i], k[:i])
+        k[i] = h * f(t + C[i] * h, u_i, d2theta1, d2theta2)
 
-    return u + np.dot(_RK8_B, k)
+    return u + np.dot(B, k)
 
 
 def adaptive_rk4_step(f, t, u, h):
@@ -308,6 +309,10 @@ class DoublePendulumSolver:
         default="rk4",
         metadata={"description": "Solver method to use"},
     )
+    use_longdouble: bool = field(
+        default=False,
+        metadata={"description": "Use numpy.longdouble (float128) precision"},
+    )
     path_steps: Path = field(
         default=Path(""),
         metadata={"description": "Path to save adaptive step data (t, u, h) as .npz"},
@@ -332,7 +337,8 @@ class DoublePendulumSolver:
         # map pi to symbol
         pi_2 = "pi_2" if self.theta_1 == np.pi / 2 else "pi_1"
         pi_6 = "pi_6" if self.theta_2 == np.pi / 6 else "pi_1"
-        prefix = f"{self.time_str}_{self.h_str}_{pi_2}_{pi_6}_{self.omega_1}_{self.omega_2}_{self.method}"
+        ld = "_ld" if self.use_longdouble else ""
+        prefix = f"{self.time_str}_{self.h_str}_{pi_2}_{pi_6}_{self.omega_1}_{self.omega_2}_{self.method}{ld}"
         self.path_numpy = DOUBLE_PENDULUM_PATH / f"data/{prefix}.npy"
         self.path_animation = DOUBLE_PENDULUM_PATH / f"data/{prefix}.png"
         self.path_steps = DOUBLE_PENDULUM_PATH / f"data/{prefix}_steps.npz"
@@ -386,7 +392,10 @@ class DoublePendulumSolver:
         return (0, self.time), np.linspace(0, self.time, self.steps)
 
     def build_initial_conditions(self):
-        return np.array([self.theta_1, self.omega_1, self.theta_2, self.omega_2])
+        dtype = np.longdouble if self.use_longdouble else np.float64
+        return np.array(
+            [self.theta_1, self.omega_1, self.theta_2, self.omega_2], dtype=dtype
+        )
 
     def save_solution(self, u):
         np.save(self.path_numpy, u)
@@ -394,7 +403,8 @@ class DoublePendulumSolver:
     def solve_rk4(self):
         num_steps = self.steps
         u_0 = self.build_initial_conditions()
-        u = np.zeros((num_steps, 4))
+        dtype = u_0.dtype
+        u = np.zeros((num_steps, 4), dtype=dtype)
         u[0] = u_0
         for i in range(num_steps - 1):
             u[i + 1] = rk4_step(F, i * self.h, u[i], self.h)
@@ -402,15 +412,24 @@ class DoublePendulumSolver:
         self._feval_count = 4 * self.steps  # 4 stages per RK4 step
         self.save_solution(u)
         print(f"Saved solution to {self.path_numpy}")
-        print(f"Saved solution to {self.path_numpy}")
 
     def solve_rk8(self):
         num_steps = self.steps
         u_0 = self.build_initial_conditions()
-        u = np.zeros((num_steps, 4))
+        dtype = u_0.dtype
+        u = np.zeros((num_steps, 4), dtype=dtype)
         u[0] = u_0
+
+        # Pre-cast Butcher tableau to the working precision when needed
+        if dtype != _RK8_A.dtype:
+            A = _RK8_A.astype(dtype)
+            B = _RK8_B.astype(dtype)
+            C = _RK8_C.astype(dtype)
+        else:
+            A, B, C = _RK8_A, _RK8_B, _RK8_C
+
         for i in range(num_steps - 1):
-            u[i + 1] = rk8_step(F, i * self.h, u[i], self.h)
+            u[i + 1] = rk8_step(F, i * self.h, u[i], self.h, A=A, B=B, C=C)
         # u = [theta_1, omega_1, theta_2, omega_2]
         self._feval_count = 12 * self.steps  # 12 stages per RK8 step
         self.save_solution(u)
@@ -748,7 +767,7 @@ class DoublePendulumSolver:
             plt.plot(t, e_self, label=f"{self.method}, {self.h}")
         # plt.axhline(e_self[0], color="r", linestyle="--")
         path_save = (
-            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{self.h}_energy_{scale}.png"
+            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{self.h}_energy_{scale}.pdf"
         )
         if method is not None and preset is not None:
             solver = DoublePendulumSolver(method=method, preset=preset)
@@ -757,12 +776,12 @@ class DoublePendulumSolver:
             plt.axhline(self.get_energy(u_odd)[0], color="r", linestyle="--")
 
         plt.xlabel("Time")
-        plt.ylabel("Energy")
-        plt.title(
-            f"{self.method}, {self.h}, {self.theta_1_str}, {self.theta_2_str}, {self.omega_1}, {self.omega_2}"
-        )
-        plt.legend()
-        plt.savefig(path_save)
+        plt.ylabel(r"$\Delta E$ (J)")
+        plt.title(f"Energy drift for RK8, h={self.h}")
+        # plt.title( f"{self.method}, {self.h}, {self.theta_1_str}, {self.theta_2_str}, {self.omega_1}, {self.omega_2}" )
+        # plt.legend()
+        # Save fig as pdf
+        plt.savefig(path_save, format="pdf")
         print(f"Saved energy plot to {path_save}")
 
     @staticmethod
@@ -806,6 +825,7 @@ class DoublePendulumSolver:
             h_fmt = self._clean_h(h_step)
             solver_h = DoublePendulumSolver(
                 method=self.method,
+                use_longdouble=self.use_longdouble,
                 time=self.time,
                 time_str=self.time_str,
                 steps=int(self.time / h_step),
@@ -824,8 +844,8 @@ class DoublePendulumSolver:
             delta_E.append(dE)
             print(f"  h = {h_step:.1e}  →  |ΔE| = {dE:.3e}")
 
-        h_arr = np.array(h_used)
-        dE_arr = np.array(delta_E)
+        h_arr = np.array(h_used, dtype=np.float64)
+        dE_arr = np.array(delta_E, dtype=np.float64)
 
         # ── Plot ──────────────────────────────────────────────────────
         fig, ax = plt.subplots(figsize=(8, 6))
@@ -842,12 +862,10 @@ class DoublePendulumSolver:
             zorder=5,
         )
 
-        # h⁸ reference line — anchored at the largest-h point where the
-        # asymptotic regime is most reliable
+        # h⁸ reference line — anchored at the largest-h point
         C_ref = dE_arr[0] / (h_arr[0] ** 8)
-        h_ref = np.logspace(
-            np.log10(h_arr.min() / 1.5), np.log10(h_arr.max() * 1.5), 200
-        )
+        # Only span the data range, no overshoot
+        h_ref = np.logspace(np.log10(h_arr.min()), np.log10(h_arr.max()), 200)
         ax.loglog(
             h_ref,
             C_ref * h_ref**8,
@@ -858,7 +876,22 @@ class DoublePendulumSolver:
             zorder=3,
         )
 
-        # ── Annotate numerical slopes between consecutive points ──────
+        # ── Tight axis limits (15 % margin on log scale) ─────────
+        h_lo, h_hi = h_arr.min(), h_arr.max()
+        dE_lo, dE_hi = dE_arr.min(), dE_arr.max()
+        margin = 0.15  # 15 % in log₁₀ space
+        dh_log = np.log10(h_hi) - np.log10(h_lo)
+        de_log = np.log10(dE_hi) - np.log10(dE_lo)
+        ax.set_xlim(
+            10 ** (np.log10(h_lo) - margin * dh_log),
+            10 ** (np.log10(h_hi) + margin * dh_log),
+        )
+        ax.set_ylim(
+            10 ** (np.log10(dE_lo) - margin * de_log),
+            10 ** (np.log10(dE_hi) + margin * de_log),
+        )
+
+        # ── Annotate numerical slopes between consecutive points ──
         for i in range(len(h_arr) - 1):
             slope = (np.log10(dE_arr[i + 1]) - np.log10(dE_arr[i])) / (
                 np.log10(h_arr[i + 1]) - np.log10(h_arr[i])
@@ -878,17 +911,8 @@ class DoublePendulumSolver:
             )
 
         ax.set_xlabel("Step size  h", fontsize=12)
-        ax.set_ylabel(r"$|\Delta E| = |E(t_f) - E(0)|$", fontsize=12)
-        ax.set_title(
-            f"{self.method}: energy-error convergence\n"
-            f"T = {self.time}s,  "
-            f"theta_1 = {self.theta_1_str},  "
-            f"theta_2 = {self.theta_2_str},  "
-            f"omega_1 = {self.omega_1},  "
-            f"omega_2 = {self.omega_2}",
-            fontsize=11,
-        )
-        ax.legend(fontsize=10)
+        ax.set_ylabel(r"$|\Delta E|$", fontsize=12)
+        ax.legend(fontsize=20, loc="upper right")
         ax.grid(True, which="major", alpha=0.4)
         ax.grid(True, which="minor", alpha=0.15)
         ax.invert_xaxis()  # smaller h (more accurate) → right
@@ -896,8 +920,11 @@ class DoublePendulumSolver:
         fig.tight_layout()
 
         prefix = "_".join(self._clean_h(h) for h in h_list)
-        path = f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{prefix}_convergence.png"
-        fig.savefig(path, dpi=150)
+        ld = "_ld" if self.use_longdouble else ""
+        path = (
+            f"{DOUBLE_PENDULUM_PATH}/plots/{self.method}_{prefix}_convergence{ld}.pdf"
+        )
+        fig.savefig(path, format="pdf")
         print(f"Saved convergence plot → {path}")
         plt.show()
 

@@ -123,7 +123,6 @@ Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equatio
   ],
 )
 
-
 == Working example with  RK4 and RK8
 
 #grid(
@@ -253,14 +252,15 @@ Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equatio
   columns: (1fr, 1fr),
   [
     #figure(
-      image("images/dp.webp", width: 100%),
-      caption: [RK4 Drift],
+      image("images/rk8_0.01_0.005_0.002_0.001_convergence_ld.pdf", width: 100%),
+      caption: [],
     )
+
   ],
   [
     #figure(
-      image("images/dp.webp", width: 100%),
-      caption: [RK8 Drift],
+      image("images/rk8_0.01_0.0075_0.005_0.0035_0.002_0.001_convergence.pdf", width: 100%),
+      caption: [],
     )
   ],
 )
@@ -437,28 +437,42 @@ Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equatio
   At equal wall-clock cost, DOP853 takes larger steps and commits far less error per unit of compute — critical for a chaotic system where local errors grow exponentially.
 ]
 
-== Testing out Adaptive Runge-Kutta RK45 vs DOP853
+== Testing out Adaptive RK45 vs DOP853
 
 #grid(
   columns: (1fr, 1fr),
+  gutter: 1.2em,
   [
     #figure(
       table(
-        columns: (auto, auto, auto, auto, auto),
+        columns: (auto, auto, auto),
+        stroke: 0.5pt,
+        table.header([], [*RK45*], [*DOP853*]),
+        [*Accepted steps*], [1 579], [633],
+        [$h_min$], [$1.0 times 10^(-3)$], [$1.7 times 10^(-2)$],
+        [$h_max$], [$7.5 times 10^(-2)$], [$2.4 times 10^(-1)$],
+        [$h_"mean"$], [$3.2 times 10^(-2)$], [$7.9 times 10^(-2)$],
+        [$|Delta H|$ (drift)], [$2.1 times 10^(-3)$], [$2.8 times 10^(-5)$],
+        [*RHS evals*], [$approx$ 9 474], [$approx$ 7 596],
+        [*Order*], [$5(4)$], [$8(5)$],
       ),
+      caption: [Hard preset: $t=50\,"s"$, $h_0=10^(-3)$, $epsilon_"rel"=10^(-6)$],
     )
   ],
   [
-    #figure(
-      image("images/dp.webp", width: 10%),
-      caption: [Adaptive Runge-Kutta DOP853 with relative tolerance of $10^{-6}$, h],
-    )
-    #figure(
-      image("images/dp.webp", width: 10%),
-      caption: [a],
-    )
+    DOP853 takes *2.5$times$ fewer steps* with *3$times$ larger average $h$* while achieving *100$times$ better energy conservation* ($2.8 times 10^(-5)$ vs $2.1 times 10^(-3)$).
+
+    #v(1em)
+
+    Same tolerance $=>$ DOP853 reaches deeper into chaotic fidelity at *less cost*.
   ],
 )
+
+#v(0.5em)
+
+#tblock(title: [The gap widens with tighter tolerance])[
+  At $epsilon_"rel" = 10^(-12)$ DOP853 still handles the integration elegantly; RK45 may stall, rejecting nearly every step once the Lyapunov instability sets in.
+]
 
 == Adaptive Runge-Kutta RK45 vs DOP853
 
