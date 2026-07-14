@@ -26,7 +26,9 @@
 )
 #title-slide()
 
-== The double pendulum key facts
+== Modeling the double pendulum
+
+#set par(spacing: 0.75em)
 
 #grid(
   columns: (2fr, 1fr),
@@ -34,30 +36,34 @@
   gutter: 1em,
   // Space between columns
   [
-    With the position of each mass you can calculate the lagragian
+    With the position of each mass you can calculate the *lagragian*.
     $
       x_1 = L_1 sin theta_1 and y_1 = - L_1 cos theta_1 \
       x_2 = x_1 + L_2 sin theta_2 and y_2 = y_1 - L_2 cos theta_2
     $
-    The phase space is four dimensional $(theta_1, theta_2, dot(theta)_1, dot(theta)_2)$
+    The phase space is four dimensional $(theta_1, theta_2, dot(theta)_1, dot(theta)_2)$.
     $ cal(L) = T - U $
-    Using the _Euler Lagrange_ equations you obtain:
+    Using the *Euler Lagrange* equations you obtain:
     $
       dot.double(theta)_1 = f_1(theta_1, theta_2, dot(theta)_1, dot(theta)_2) \
       dot.double(theta)_2 = f_2(theta_1, theta_2, dot(theta)_1, dot(theta)_2)
     $
+    _How you solve this second order differential equation?_
   ],
   [
     #figure(
       image("images/dp.webp", width: 120%),
-      caption: [Double Pendulum formulation],
+      caption: [A double pendulum],
     )
   ],
 )
 
 == Motivating Kutta
 
-Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
+#align(center)[
+  Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
+]
+
 
 #grid(
   columns: (1fr, 1fr, 1fr),
@@ -247,6 +253,8 @@ Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equatio
 )
 
 == Plots
+
+
 
 #grid(
   columns: (1fr, 1fr),
@@ -460,21 +468,16 @@ Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equatio
     )
   ],
   [
-    DOP853 takes *2.5$times$ fewer steps* with *3$times$ larger average $h$* while achieving *100$times$ better energy conservation* ($2.8 times 10^(-5)$ vs $2.1 times 10^(-3)$).
-
-    #v(1em)
-
-    Same tolerance $=>$ DOP853 reaches deeper into chaotic fidelity at *less cost*.
+    #figure(
+      image("images/h_vs_time_rk45_dop853.pdf", width: 100%),
+      caption: [Step-size evolution $h(t)$ — DOP853 takes far fewer, much larger steps],
+    )
   ],
 )
 
 #v(0.5em)
 
-#tblock(title: [The gap widens with tighter tolerance])[
-  At $epsilon_"rel" = 10^(-12)$ DOP853 still handles the integration elegantly; RK45 may stall, rejecting nearly every step once the Lyapunov instability sets in.
-]
-
-== Adaptive Runge-Kutta RK45 vs DOP853
+// #tblock(title: [The gap widens with tighter tolerance])[ At $epsilon_"rel" = 10^(-12)$ DOP853 still handles the integration elegantly; RK45 may stall, rejecting nearly every step once the Lyapunov instability sets in. ] == Adaptive Runge-Kutta RK45 vs DOP853
 
 #figure(
   image("images/adapt.png", width: 67%),
