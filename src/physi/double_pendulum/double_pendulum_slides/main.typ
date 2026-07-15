@@ -112,7 +112,7 @@
   [
     #let bf(x) = math.bold(math.upright(x))
 
-    We have second derivatives; use vectors instead of scalars.
+    Use vectors instead of scalars.
 
     $ bf(u)=(theta_1, dot(theta)_1, theta_2, dot(theta)_1) $
 
@@ -136,7 +136,7 @@
   gutter: 1em,
   [
     #figure(
-      image("images/rk4_t.png", width: 80%),
+      image("images/rk4_t.png", width: 90%),
       caption: [Butcher tableau for RK4],
     )
   ],
@@ -245,33 +245,32 @@
   ],
 )
 
-== Working example with RK4 and RK8
-
-#figure(
-  image("images/video.png", width: 70%),
-  caption: [Comparison of RK4 and RK8 solutions with $h=0.001$],
-)
-
-== Plots
-
-
+== Energy confirms method order
 
 #grid(
   columns: (1fr, 1fr),
   [
     #figure(
       image("images/rk8_0.01_0.005_0.002_0.001_convergence_ld.pdf", width: 100%),
-      caption: [],
+      caption: [Using 64],
     )
-
   ],
   [
     #figure(
       image("images/rk8_0.01_0.0075_0.005_0.0035_0.002_0.001_convergence.pdf", width: 100%),
-      caption: [],
+      caption: [Using 128],
     )
   ],
 )
+
+== Working example with RK4 and RK8
+
+#figure(
+  image("images/video.png", width: 70%),
+  caption: [Comparison of RK4 and RK8 solutions with $h=0.001$ and numerical precision 64],
+)
+
+
 
 == Adaptive step-size control
 
