@@ -59,35 +59,26 @@
 )
 
 == Motivating Kutta
+#align(center)[
+  Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
+]
+
+#figure(
+  image("images/explicit.png", width: 35%),
+  caption: [Heun's Method],
+)
+
+== Motivating Kutta
 
 #align(center)[
   Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
 ]
 
-
-#grid(
-  columns: (1fr, 1fr, 1fr),
-  gutter: 1em,
-  [
-    #figure(
-      image("images/explicit.png"),
-      caption: [Improved Euler $y_(n+1) = y_n + h/2(k_1 + k_2)$],
-    )
-  ],
-  [
-    #figure(
-      image("images/mid.png"),
-      caption: [Midpoint Runge Kutta
-        $y_n+h k_2$],
-    )
-  ],
-  [
-    #figure(
-      image("images/rk.png"),
-      caption: [Runge Kutta Order $3$],
-    )
-  ],
+#figure(
+  image("images/rk.png", width: 35%),
+  caption: [Runge Kutta Order $3$],
 )
+
 
 == From Taylor series to Runge Kutta
 
@@ -166,11 +157,22 @@
   columns: (1.1fr, 0.9fr),
   gutter: 1.2em,
   [
-    The Hamiltonian $H$ is conserved exactly — any drift is *pure numerical error* accumulating over time.
-    $ Delta H(t) = H(t) - H(0) $
+    The energy $E$ is conserved exactly — any drift is *pure numerical error* accumulating over time.
+    $ Delta E(t) = E(t) - E(0) $
 
-    #v(0.7em)
-
+    #v(1cm)
+    #figure(
+      table(
+        columns: 2,
+        align: (left, left),
+        [*Method*], [*Energy Behavior*],
+        [Runge-Kutta (Euler, RK4, ...)], [Exponential drift — grows or decays over time],
+        [Symplectic (leapfrog)], [Oscillates — bounded, no long-term trend],
+      ),
+      caption: [Energy drift behavior],
+    )
+  ],
+  [
     #figure(
       cetz-canvas({
         import cetz.draw: *
@@ -223,81 +225,73 @@
         )
         content((W * 0.94, H * 0.06 + 0.22), text(fill: green, size: 12pt)[RK8])
       }),
-      caption: [Energy drift over time for different integrators],
-    )
-  ],
-  [
-    #figure(
-      table(
-        columns: (auto, auto, auto),
-        stroke: 0.5pt,
-        table.header([*Method*], [*Drift behaviour*], [*Order*]),
-        [Euler], [exponential growth], [1],
-        [RK4], [polynomial drift], [4],
-        [RK8], [near machine $epsilon$], [8],
-      ),
-      caption: [Energy drift vs. method order],
+      caption: [Energy drift over time for different integrators, (exponential)],
     )
 
-    #v(2.7em)
-
+    #v(1cm)
     _Energy drift *confirms method order* without needing a reference solution._
   ],
 )
 
 == Energy confirms method order
 
+#let width = 100%
+
+#let low_rk4 = image("images/rk4_log_log_convergence.pdf", width: width)
+#let high_rk4 = image("images/rk4_log_log_convergence_combined.pdf", width: width)
+
+
 #grid(
   columns: (1fr, 1fr),
   [
     #figure(
-      image("images/rk8_0.01_0.005_0.002_0.001_convergence_ld.pdf", width: 100%),
-      caption: [Using 64],
+      low_rk4,
+      caption: [Energy against $h$ using float64, RK4],
     )
   ],
   [
     #figure(
-      image("images/rk8_0.01_0.0075_0.005_0.0035_0.002_0.001_convergence.pdf", width: 100%),
-      caption: [Using 128],
+      high_rk4,
+      caption: [Energy against $h$ using float128, RK4],
+    )
+  ],
+)
+
+== Energy confirms method order
+
+#let low = image("images/rk8_log_log_convergence.pdf", width: width)
+#let high = image("images/rk8_log_log_convergence_combined.pdf", width: width)
+
+#grid(
+  columns: (1fr, 1fr),
+  [
+    #figure(
+      low,
+      caption: [Energy against $h$ using float64, RK8],
+    )
+
+  ],
+  [
+    #figure(
+      high,
+      caption: [Energy against $h$ using float128, RK8],
     )
   ],
 )
 
 == Working example with RK4 and RK8
 
+
 #figure(
   image("images/video.png", width: 70%),
   caption: [Comparison of RK4 and RK8 solutions with $h=0.001$ and numerical precision 64],
 )
 
-
-
 == Adaptive step-size control
 
 #grid(
-  columns: (1.1fr, 0.9fr),
+  columns: (0.8fr, 1.2fr),
   gutter: 1.2em,
-  [
-    Fixed $h$ wastes work in smooth regions and loses accuracy in dynamic ones.
-    *Goal:* keep the local error near a tolerance $epsilon$ by adjusting $h$ at every step.
-
-    At step $n$, compute two estimates of $y(t_(n+1))$:
-    $
-             u_(n+1) & : quad "order" p quad   & ("solution kept") \
-      tilde(u)_(n+1) & : quad "order" p+1 quad & ("error checker")
-    $
-    Local error estimate and its power-law scaling:
-    $
-      E_n (h) = lr(||u_(n+1) - tilde(u)_(n+1)||) approx C h^(p+1)
-    $
-    Require $E_n (h_"new") = epsilon$, solve for scale factor $q = h_"new" / h$:
-    $
-      q^(p+1) dot E_n (h) approx epsilon
-      quad => quad
-      q = lr((frac(epsilon, E_n (h))))^(1\/(p+1))
-    $
-    $h_"new" = q dot h$ — *accepted* if $q >= 1$, *rejected & retried* if $q < 1$.
-  ],
   [
     #align(center)[
       #figure(
@@ -315,27 +309,9 @@
           // Curve: smooth — dynamic burst — smooth
           let x1 = W * 0.4
           let x2 = W * 0.64
-          bezier(
-            (0, 0.9),
-            (x1, 1.05),
-            (W * 0.1, 0.7),
-            (W * 0.3, 1.3),
-            stroke: (paint: black, thickness: 1.8pt),
-          )
-          bezier(
-            (x1, 1.05),
-            (x2, 0.95),
-            (W * 0.47, 2.3),
-            (W * 0.58, -0.15),
-            stroke: (paint: black, thickness: 1.8pt),
-          )
-          bezier(
-            (x2, 0.95),
-            (W, 1.1),
-            (W * 0.74, 0.65),
-            (W * 0.88, 1.45),
-            stroke: (paint: black, thickness: 1.8pt),
-          )
+          bezier((0, 0.9), (x1, 1.05), (W * 0.1, 0.7), (W * 0.3, 1.3), stroke: (paint: black, thickness: 1.8pt))
+          bezier((x1, 1.05), (x2, 0.95), (W * 0.47, 2.3), (W * 0.58, -0.15), stroke: (paint: black, thickness: 1.8pt))
+          bezier((x2, 0.95), (W, 1.1), (W * 0.74, 0.65), (W * 0.88, 1.45), stroke: (paint: black, thickness: 1.8pt))
 
           // Step markers: wide — narrow — wide
           let marks = (0.0, 0.85, 1.7, 2.1, 2.32, 2.5, 2.65, 2.78, 2.9, 3.4, 4.15, 5.0)
@@ -354,43 +330,56 @@
           content((W * 0.5, Hc * 0.85), text(size: 14pt, fill: red)[dynamic])
           content((W * 0.82, Hc * 0.75), text(size: 14pt, fill: gray)[smooth])
         }),
-        caption: [Adaptive step sizing: wide steps in smooth regions, narrow in dynamic ones],
+        caption: [Adaptive step sizing],
       )
     ]
+    #v(1cm)
+
+    *Goal:* keep the local error near a tolerance $epsilon$ by adjusting $h$ at every step. ($h_(text("new")) = q h$)
+  ],
+  [
+    At step $n$:
+    $
+             u_(n+1) & : quad "order" p quad   & ("solution kept") \
+      tilde(u)_(n+1) & : quad "order" p+1 quad & ("error checker")
+    $
+    local error estimate:
+    $
+      e_n (h) = lr(||u_(n+1) - tilde(u)_(n+1)||) approx C h^(p+1)
+    $
+    require $e_n (h_"new") < epsilon$
+    $
+      => quad
+      q = lr((frac(epsilon, e_n (h))))^(1\/(p+1))
+    $
+
+    $h_"new"$— *accepted* if $q >= 1$
+
+    *rejected & retried* if $q < 1$.
   ],
 )
 
-#tblock(title: [Embedded pair — no extra cost])[
-  Both $u_(n+1)$ and $tilde(u)_(n+1)$ are built from the *same stages $k_i$* — the error check costs zero extra RHS evaluations.
-]
-
-== Embedding Runge Kutta
+== Embedded Runge-Kutta Cost
 
 #grid(
   columns: (1fr, 1fr),
-  gutter: 1.2em,
   [
-    A single Butcher tableau stores *two methods at once* by carrying two rows of weights.
-    The stages $k_i$ are computed once; both solutions are cheap linear combinations:
+    Both $u_(n+1)$ and $tilde(u)_(n+1)$ are built from the *same stages $k_i$*.
+
     $
              u_(n+1) & = u_n + h sum_i b_i k_i quad      &   arrow "order" p \
       tilde(u)_(n+1) & = u_n + h sum_i hat(b)_i k_i quad & arrow "order" p+1
     $
     Error estimate — no extra $f$ calls:
-    $ E_n = h lr(|| sum_i (b_i - hat(b)_i) k_i ||) $
-
-    *FSAL — First Same As Last:* the final stage $k_s$ satisfies
-    $ k_s = f(t_(n+1), u_(n+1)) = k_1 "of step" n+1 $
-    so it is *reused*, saving one RHS evaluation per accepted step.
+    $ e_n = h lr(|| sum_i (b_i - hat(b)_i) k_i ||) $
   ],
   [
-    // Butcher tableau schematic
     #align(center)[
       #figure(
         cetz-canvas({
           import cetz.draw: *
-          let aw = 4.5 // A block width
-          let ah = 2.8 // A block height
+          let aw = 5.5 // A block width
+          let ah = 3.8 // A block height
           let bh = 0.65 // b-row height
           let cw = 0.8 // c column width
 
@@ -424,25 +413,20 @@
         }),
         caption: [Butcher tableau for an embedded Runge–Kutta pair],
       )
+      #figure(
+        table(
+          columns: (auto, auto, auto),
+          stroke: 0.5pt,
+          table.header([*Pair*], [*Orders*], [*Stages*]),
+          [RK45], [$5(4)$], [7],
+          [DOP853], [$8(5)$], [13],
+        ),
+        caption: [FSAL saves one evaluation on every accepted step],
+      )
     ]
-
-    #v(0.6em)
-    #figure(
-      table(
-        columns: (auto, auto, auto, auto, auto),
-        stroke: 0.5pt,
-        table.header([*Pair*], [*Orders*], [*Stages*], [*FSAL*], [*Evals\/step*]),
-        [RK45], [$5(4)$], [6], [yes], [5],
-        [DOP853], [$8(5)$], [12], [yes], [11],
-      ),
-      caption: [FSAL saves one evaluation on every accepted step],
-    )
   ],
 )
 
-#tblock(title: [Why DOP853 over RK45 for the double pendulum?])[
-  At equal wall-clock cost, DOP853 takes larger steps and commits far less error per unit of compute — critical for a chaotic system where local errors grow exponentially.
-]
 
 == Testing out Adaptive RK45 vs DOP853
 
@@ -460,10 +444,10 @@
         [$h_max$], [$7.5 times 10^(-2)$], [$2.4 times 10^(-1)$],
         [$h_"mean"$], [$3.2 times 10^(-2)$], [$7.9 times 10^(-2)$],
         [$|Delta H|$ (drift)], [$2.1 times 10^(-3)$], [$2.8 times 10^(-5)$],
-        [*RHS evals*], [$approx$ 9 474], [$approx$ 7 596],
+        [*Stages evals*], [$approx$ 9 474], [$approx$ 7 596],
         [*Order*], [$5(4)$], [$8(5)$],
       ),
-      caption: [Hard preset: $t=50\,"s"$, $h_0=10^(-3)$, $epsilon_"rel"=10^(-6)$],
+      caption: [Config: $t=50\,"s"$, $h_0=10^(-3)$, $epsilon=10^(-6)$],
     )
   ],
   [
@@ -476,23 +460,30 @@
 
 #v(0.5em)
 
-// #tblock(title: [The gap widens with tighter tolerance])[ At $epsilon_"rel" = 10^(-12)$ DOP853 still handles the integration elegantly; RK45 may stall, rejecting nearly every step once the Lyapunov instability sets in. ] == Adaptive Runge-Kutta RK45 vs DOP853
+#figure(
+  image("images/adapt.png", width: 72%),
+  caption: [Adaptive Runge-Kutta RK45 with relative tolerance of $10^(-6)$],
+)
+
+== Energy Drift for Embedded Runge Kutta
 
 #figure(
-  image("images/adapt.png", width: 67%),
-  caption: [Adaptive Runge-Kutta RK45 with relative tolerance of $10^{-6}$, h],
+  image("images/adaptive_energy.png", width: 65%),
+  caption: [Energy drift for both RK45 and DOP853],
 )
 
 == Takeaways
 
 #set list(spacing: 0.8em)
-- *Order matters* — global error $cal(O)(h^p)$; RK8 beats RK4 by a factor of $h^4$ at the same cost.
-- *Adaptive $h$ saves work* — concentrate evaluations where dynamics are fast, stretch where they are slow.
-- *Embedded pairs are free* — same stages, two weight rows; FSAL saves one extra evaluation per accepted step.
-- *$Delta H$ is a proxy, not a proof* — correct energy $eq.not$ correct trajectory on a chaotic shell.
-- *Use DOP853* — order 8, adaptive, FSAL: the efficient choice for long chaotic integration.
+*Adaptive $h$ saves work* — concentrate evaluations where dynamics are fast, stretch where they are slow.
 
-#tblock(title: [Bottom line])[Higher order $+$ adaptive $h$ $+$ embedded error $=$ more accuracy for less compute.]
+#v(1cm)
+
+*Use DOP853* — order 8, adaptive, FSAL: the efficient choice for long chaotic integration.
+
+#v(1cm)
+
+
 #tblock(
   title: [The efficient solver],
 )[DOP853 adaptive $=$ right order $+$ right step size $+$ free error estimate. Three ideas, one method.]
