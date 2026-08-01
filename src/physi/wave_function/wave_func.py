@@ -1,5 +1,3 @@
-from this import s
-
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.special import sph_harm_y
@@ -53,15 +51,34 @@ class Legendre:
         return 1 / 2 * (3 * np.pow(x, 2) - 1)
 
 
+def double_fac(n):
+    """
+    Double factorial n!! = n * (n-2) * (n-4) * ... down to 1 or 2.
+    """
+    if n <= 1:
+        return 1
+    result = 1
+    for k in range(n, 1, -2):
+        result *= k
+    return result
+
+
+def legendre_polynomial(n, x):
+    """
+    Evaluate the Legendre polynomial P_n(x) using the recurrence relation.
+    """
+    return Legendre(n).polynomial(x)
+
+
 def legendre_5(x):
     return 1 / 8 * (63 * np.pow(x, 5) - 70 * np.pow(x, 3) + 15 * x)
 
 
 def legendre_derivative(n, x):
     """
-    Returns the derivative of the n legendre function
+    Returns the derivative of the n-th Legendre polynomial.
     """
-    diff = legendre_polinomial(n - 1, x) - x * legendre_polinomial(n, x)
+    diff = legendre_polynomial(n - 1, x) - x * legendre_polynomial(n, x)
     return n / (1 - np.pow(x, 2)) * diff
 
 
