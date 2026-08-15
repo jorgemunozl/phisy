@@ -41,7 +41,7 @@
       x_1 = L_1 sin theta_1 and y_1 = - L_1 cos theta_1 \
       x_2 = x_1 + L_2 sin theta_2 and y_2 = y_1 - L_2 cos theta_2
     $
-    The phase space is four dimensional $(theta_1, theta_2, dot(theta)_1, dot(theta)_2)$.
+    Vector state: $(theta_1, theta_2, dot(theta)_1, dot(theta)_2)$.
     $ cal(L) = T - U $
     Using the *Euler Lagrange* equations you obtain:
     $
@@ -60,23 +60,22 @@
 
 == Motivating Kutta
 #align(center)[
-  Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
+  Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$
+
+  Euler: $y_1 = y_0 + h k_1$
 ]
 
 #figure(
-  image("images/explicit.png", width: 35%),
-  caption: [Heun's Method],
+  image("images/explicit.png", width: 27%),
+  caption: [Heun's Method, $y_1=y_0+h/2(k_1+k_2)$],
 )
 
 == Motivating Kutta
 
-#align(center)[
-  Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$ (Riccati Equation)
-]
 
 #figure(
   image("images/rk.png", width: 35%),
-  caption: [Runge Kutta Order $3$],
+  caption: [Runge Kutta using three slopes],
 )
 
 
@@ -85,7 +84,7 @@
 #set par(spacing: 0.55em)
 
 #grid(
-  columns: (1.4fr, 1fr),
+  columns: (1.2fr, 1fr),
   gutter: 1em,
   [
     Using this motivation Runge and Kutta propose the follow form to obtain the solution.
@@ -93,32 +92,44 @@
 
     $ y_(n+1) = y_n + h sum_i b_i k_i $
 
-    _How do you obtain coefficients $(a_(i j) , b_i, c_i)$?_
-
-    $ sum_(j=1) a_(i j) = c_i $
-    Using the *Taylor Polinomial* // expansion of $y(t+h)$, $y'=f(t, y)$ you asure:
-    $ y_1 - y(t_0 + h) = cal(O)(h^(p+1)) text("as") h -> 0 $
-
+    #figure(
+          image("images/table.png", width: 50%),
+          caption: [Butcher tableau],
+        )
   ],
   [
-    #let bf(x) = math.bold(math.upright(x))
+    _How do you obtain coefficients $(a_(i j) , b_i, c_i)$?_
 
-    Use vectors instead of scalars.
+    #v(1cm)
+    Using the *Taylor Polinomial* // expansion of $y(t+h)$, $y'=f(t, y)$ you asure:
+    #v(1cm)
+    $ y'=f(t,y) $
+    #v(1cm)
+    As consequence: _(Local error)_
+    $ y_1 - y(t_0 + h) = cal(O)(h^(p+1)) text("as") h -> 0 $
 
-    $ bf(u)=(theta_1, dot(theta)_1, theta_2, dot(theta)_1) $
-
-    $ dot(bf(u))=(dot(theta)_1, dot.double(theta)_1, dot(theta)_2, dot.double(theta)_2) $
-
-    Therefore:
-
-    $ bf(u_(n+1)) = bf(u_n) + h sum_i b_i bf(k_i) $
-
-    #figure(
-      image("images/table.png", width: 60%),
-      caption: [RK coefficients],
-    )
+    $p$ is the order.
   ],
 )
+
+== RK for the double pendulum
+
+#let bf(x) = math.bold(math.upright(x))
+Double pendulum has:
+$
+      dot.double(theta)_1 = f_1(theta_1, theta_2, dot(theta)_1, dot(theta)_2) \
+      dot.double(theta)_2 = f_2(theta_1, theta_2, dot(theta)_1, dot(theta)_2)
+    $
+
+Use vectors:
+
+$ bf(u)=(theta_1, dot(theta)_1, theta_2, dot(theta)_2) $
+
+$ dot(bf(u))=(dot(theta)_1, dot.double(theta)_1, dot(theta)_2, dot.double(theta)_2) $
+
+Therefore:
+
+$ bf(u_(n+1)) = bf(u_n) + h sum_i b_i bf(k_i) $
 
 == Working example with  RK4 and RK8
 
@@ -140,15 +151,19 @@
       ),
       caption: [Dormand & Prince (1981)],
     )
-    - Fixed-step variant: adaptive control disabled, $h$ held constant.
-    - Coefficients loaded directly from `scipy.integrate.DOP853`.
+    #v(1cm)
+    // - Fixed-step variant: adaptive control disabled, $h$ held constant.
+    Coefficients loaded directly from `scipy.integrate.DOP853`.
   ],
 )
 
 #v(1cm)
 
 #tblock(title: [Global truncation error])[
-  Scales as $cal(O)(h^4)$ for RK4 and $cal(O)(h^8)$ for RK8 — for the same $h$, RK8 error is roughly $h^4$ times smaller, which for $h=0.01$ is a factor of $10^8$.
+  $n$ number of steps, $h=$ step size, $T=$ total time.
+  $n times h=T$, $n=T/h$
+
+  $cal(O)(h^4)$ for RK4 and $cal(O)(h^8)$ for RK8.
 ]
 
 == Energy Drift Comparison
@@ -166,8 +181,8 @@
         columns: 2,
         align: (left, left),
         [*Method*], [*Energy Behavior*],
-        [Runge-Kutta (Euler, RK4, ...)], [Exponential drift — grows or decays over time],
-        [Symplectic (leapfrog)], [Oscillates — bounded, no long-term trend],
+        [Runge-Kutta (Euler, RK4, ...)], [Exponential drift — grows or decays],
+        [Symplectic (leapfrog)], [Oscillates — bounded],
       ),
       caption: [Energy drift behavior],
     )
@@ -287,13 +302,7 @@
   caption: [Comparison of RK4 and RK8 solutions with $h=0.001$ and numerical precision 64],
 )
 
-== Adaptive step-size control
-
-#grid(
-  columns: (0.8fr, 1.2fr),
-  gutter: 1.2em,
-  [
-    #align(center)[
+== Adaptive step-size control idea
       #figure(
         cetz-canvas({
           import cetz.draw: *
@@ -332,34 +341,28 @@
         }),
         caption: [Adaptive step sizing],
       )
-    ]
     #v(1cm)
 
     *Goal:* keep the local error near a tolerance $epsilon$ by adjusting $h$ at every step. ($h_(text("new")) = q h$)
-  ],
-  [
+
+==  Adaptive RK Formulation
+
     At step $n$:
     $
-             u_(n+1) & : quad "order" p quad   & ("solution kept") \
-      tilde(u)_(n+1) & : quad "order" p+1 quad & ("error checker")
+             u_(n+1) & : quad "order" p quad   & ("solution checker") \
+      tilde(u)_(n+1) & : quad "order" p+1 quad & ("error kept")
     $
     local error estimate:
     $
       e_n (h) = lr(||u_(n+1) - tilde(u)_(n+1)||) approx C h^(p+1)
     $
-    require $e_n (h_"new") < epsilon$
+    require $e_n (h_"new") approx epsilon$ #h(1cm) but #h(1cm) $e_n (q h) approx C (q h)^(p+1)$
     $
       => quad
       q = lr((frac(epsilon, e_n (h))))^(1\/(p+1))
     $
 
-    $h_"new"$— *accepted* if $q >= 1$
-
-    *rejected & retried* if $q < 1$.
-  ],
-)
-
-== Embedded Runge-Kutta Cost
+== Adaptive Runge-Kutta cost
 
 #grid(
   columns: (1fr, 1fr),
@@ -413,6 +416,7 @@
         }),
         caption: [Butcher tableau for an embedded Runge–Kutta pair],
       )
+      #v(1cm)
       #figure(
         table(
           columns: (auto, auto, auto),
@@ -421,7 +425,7 @@
           [RK45], [$5(4)$], [7],
           [DOP853], [$8(5)$], [13],
         ),
-        caption: [FSAL saves one evaluation on every accepted step],
+        caption: [Examples],
       )
     ]
   ],
@@ -439,15 +443,14 @@
         columns: (auto, auto, auto),
         stroke: 0.5pt,
         table.header([], [*RK45*], [*DOP853*]),
-        [*Accepted steps*], [1 579], [633],
+        [*Used steps*], [1 579], [633],
         [$h_min$], [$1.0 times 10^(-3)$], [$1.7 times 10^(-2)$],
         [$h_max$], [$7.5 times 10^(-2)$], [$2.4 times 10^(-1)$],
-        [$h_"mean"$], [$3.2 times 10^(-2)$], [$7.9 times 10^(-2)$],
-        [$|Delta H|$ (drift)], [$2.1 times 10^(-3)$], [$2.8 times 10^(-5)$],
+        [$|Delta H|$ ], [$2.1 times 10^(-3)$], [$2.8 times 10^(-5)$],
         [*Stages evals*], [$approx$ 9 474], [$approx$ 7 596],
         [*Order*], [$5(4)$], [$8(5)$],
       ),
-      caption: [Config: $t=50\,"s"$, $h_0=10^(-3)$, $epsilon=10^(-6)$],
+      caption: [Config: $t=50"s"$, $h_0=10^(-3)$, $epsilon=10^(-6)$],
     )
   ],
   [
@@ -465,28 +468,23 @@
   caption: [Adaptive Runge-Kutta RK45 with relative tolerance of $10^(-6)$],
 )
 
-== Energy Drift for Embedded Runge Kutta
+// == Energy Drift for Embedded Runge Kutta #figure( image("images/adaptive_energy.png", width: 65%), caption: [Energy drift for both RK45 and DOP853], )
 
-#figure(
-  image("images/adaptive_energy.png", width: 65%),
-  caption: [Energy drift for both RK45 and DOP853],
-)
-
-== Takeaways
+== Takeaways - Adaptive Methods
 
 #set list(spacing: 0.8em)
 *Adaptive $h$ saves work* — concentrate evaluations where dynamics are fast, stretch where they are slow.
 
 #v(1cm)
 
-*Use DOP853* — order 8, adaptive, FSAL: the efficient choice for long chaotic integration.
+You can *choose*  the error tolerance — the smaller, the more accurate, but the more work.
 
 #v(1cm)
 
 
 #tblock(
-  title: [The efficient solver],
-)[DOP853 adaptive $=$ right order $+$ right step size $+$ free error estimate. Three ideas, one method.]
+  title: [The efficient solver - Proved],
+)[DOP853 adaptive $=$ right order $+$ right step size $+$ free error estimate.]
 
 
 == Thanks you!!
@@ -509,7 +507,7 @@
       caption: [
         #link(
           "https://github.com/jorgemunozl/phisy/tree/master/src/physi/double_pendulum",
-        )[#fa-github() Github Repo for Reproducibility]
+        )[#fa-github() jorgemunozl/phisy]
       ],
       numbering: none,
     )
