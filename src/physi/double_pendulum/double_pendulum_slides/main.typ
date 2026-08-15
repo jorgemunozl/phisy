@@ -61,10 +61,12 @@
 == Motivating Kutta
 #align(center)[
   Differential equation: $y' = f(t, y)= t^2 + y^2$, $y(0) = 0.46$
+
+  Euler: $y_1 = y_0 + h k_1$
 ]
 
 #figure(
-  image("images/explicit.png", width: 37%),
+  image("images/explicit.png", width: 27%),
   caption: [Heun's Method, $y_1=y_0+h/2(k_1+k_2)$],
 )
 
