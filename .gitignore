@@ -1,5 +1,6 @@
 # Python-generated files
 __pycache__/
+*.mp3
 *.py[oc]
 build/
 dist/
@@ -10,7 +11,7 @@ wheels/
 
 media/
 
-src/curricular/mathematics_methods_lab_03/images/
+src/physi/curricular/mathematics_methods_ii_lab_01
 
 *.npy
 *.npz
